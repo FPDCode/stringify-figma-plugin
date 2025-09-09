@@ -105,7 +105,7 @@ async function createDefaultCollection() {
         return null;
     }
 }
-// Create variables for text layers with enhanced processing
+// Create variables for text layers with enhanced processing and progress updates
 async function createVariablesForTextLayers(textLayers, collectionId) {
     try {
         const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
@@ -129,43 +129,61 @@ async function createVariablesForTextLayers(textLayers, collectionId) {
                 console.warn(`Could not load variable ${id}:`, error);
             }
         }
-        for (const textLayer of textLayers) {
-            try {
-                const textContent = textLayer.characters.trim();
-                if (!textContent) {
-                    skipped++;
-                    continue;
-                }
-                const variableName = createVariableName(textContent);
-                // Check if variable already exists by name and content
-                let existingVariable = null;
-                for (const [name, variable] of existingVariables) {
-                    if (name === variableName &&
-                        variable.valuesByMode[collection.defaultModeId] === textContent) {
-                        existingVariable = variable;
-                        break;
+        // Process in batches for better performance and progress updates
+        const BATCH_SIZE = 10; // Process 10 text layers at a time
+        const totalLayers = textLayers.length;
+        for (let i = 0; i < totalLayers; i += BATCH_SIZE) {
+            const batch = textLayers.slice(i, i + BATCH_SIZE);
+            // Process batch
+            for (const textLayer of batch) {
+                try {
+                    const textContent = textLayer.characters.trim();
+                    if (!textContent) {
+                        skipped++;
+                        continue;
+                    }
+                    const variableName = createVariableName(textContent);
+                    // Check if variable already exists by name and content
+                    let existingVariable = null;
+                    for (const [name, variable] of existingVariables) {
+                        if (name === variableName &&
+                            variable.valuesByMode[collection.defaultModeId] === textContent) {
+                            existingVariable = variable;
+                            break;
+                        }
+                    }
+                    if (existingVariable) {
+                        // Connect to existing variable
+                        textLayer.setBoundVariable('characters', existingVariable);
+                        connected++;
+                    }
+                    else {
+                        // Create new variable
+                        const newVariable = figma.variables.createVariable(variableName, collection, 'STRING');
+                        newVariable.setValueForMode(collection.defaultModeId, textContent);
+                        // Add to our cache for future checks
+                        existingVariables.set(variableName, newVariable);
+                        // Connect text layer to new variable
+                        textLayer.setBoundVariable('characters', newVariable);
+                        created++;
                     }
                 }
-                if (existingVariable) {
-                    // Connect to existing variable
-                    textLayer.setBoundVariable('characters', existingVariable);
-                    connected++;
-                }
-                else {
-                    // Create new variable
-                    const newVariable = figma.variables.createVariable(variableName, collection, 'STRING');
-                    newVariable.setValueForMode(collection.defaultModeId, textContent);
-                    // Add to our cache for future checks
-                    existingVariables.set(variableName, newVariable);
-                    // Connect text layer to new variable
-                    textLayer.setBoundVariable('characters', newVariable);
-                    created++;
+                catch (error) {
+                    console.error(`Error processing text layer "${textLayer.name}":`, error);
+                    errors++;
                 }
             }
-            catch (error) {
-                console.error(`Error processing text layer "${textLayer.name}":`, error);
-                errors++;
-            }
+            // Send progress update
+            const processed = Math.min(i + BATCH_SIZE, totalLayers);
+            const progress = Math.round((processed / totalLayers) * 100);
+            const remaining = totalLayers - processed;
+            figma.ui.postMessage({
+                type: 'progress-update',
+                progress: progress,
+                remaining: remaining
+            });
+            // Small delay to prevent UI freezing
+            await new Promise(resolve => setTimeout(resolve, 10));
         }
         return { created, connected, skipped, errors };
     }

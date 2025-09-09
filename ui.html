@@ -2,272 +2,522 @@
 <html>
 <head>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+    
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0;
       padding: 16px;
-      margin: 0;
       background: #ffffff;
+      width: 271px;
+      height: 398px;
+      overflow: hidden;
     }
     
-    .header {
-      margin-bottom: 20px;
+    .plugin-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      gap: 8px;
     }
     
-    .header h2 {
-      margin: 0 0 8px 0;
-      font-size: 16px;
-      font-weight: 600;
-      color: #1e1e1e;
+    .collection-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     
-    .header p {
+    .collection-label {
+      font-family: Inter;
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.21;
+      color: #000000;
       margin: 0;
-      font-size: 12px;
-      color: #8c8c8c;
-    }
-    
-    .section {
-      margin-bottom: 16px;
-    }
-    
-    .section h3 {
-      margin: 0 0 8px 0;
-      font-size: 14px;
-      font-weight: 500;
-      color: #1e1e1e;
     }
     
     .collection-select {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #e5e5e5;
-      border-radius: 6px;
-      font-size: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      border: 0.5px solid rgba(84, 84, 86, 0.34);
+      border-radius: 8px;
       background: #ffffff;
-    }
-    
-    .collection-select:focus {
-      outline: none;
-      border-color: #0c8ce9;
-    }
-    
-    .button {
-      width: 100%;
-      padding: 10px 16px;
-      border: none;
-      border-radius: 6px;
-      font-size: 14px;
-      font-weight: 500;
       cursor: pointer;
       transition: all 0.2s;
     }
     
-    .button-primary {
-      background: #0c8ce9;
-      color: white;
+    .collection-select:hover {
+      border-color: #007AFF;
     }
     
-    .button-primary:hover {
-      background: #0a7bc7;
+    .collection-text {
+      font-family: Inter;
+      font-weight: 400;
+      font-size: 15px;
+      line-height: 1.21;
+      color: #000000;
+      flex: 1;
     }
     
-    .button-secondary {
-      background: #f3f3f3;
-      color: #1e1e1e;
-      margin-top: 8px;
+    .collection-text.placeholder {
+      color: rgba(60, 60, 67, 0.6);
     }
     
-    .button-secondary:hover {
-      background: #e5e5e5;
+    .dropdown-arrow {
+      width: 12.72px;
+      height: 7.16px;
+      background: #000000;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='currentColor' stroke-width='2' fill='none'/%3E%3C/svg%3E") no-repeat center;
+      mask-size: contain;
     }
     
-    .status {
-      margin-top: 12px;
+    .dropdown-arrow.placeholder {
+      background: rgba(60, 60, 67, 0.6);
+    }
+    
+    .text-counter-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 8px;
+      background: #ffffff;
+      border-radius: 12px;
+      flex: 1;
+      min-height: 80px;
+    }
+    
+    .text-counter-number {
+      font-family: Inter;
+      font-weight: 700;
+      font-size: 48px;
+      line-height: 1.21;
+      color: #000000;
+      text-align: center;
+      margin: 0;
+    }
+    
+    .text-counter-label {
+      font-family: Inter;
+      font-weight: 400;
+      font-size: 13px;
+      line-height: 1.21;
+      color: #000000;
+      text-align: center;
+      margin: 0;
+    }
+    
+    .button-container {
+      height: 44px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    
+    .button {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 4px;
+      padding: 16px 40px;
+      border: none;
+      border-radius: 12px;
+      font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 510;
+      font-size: 15px;
+      line-height: 1.47;
+      letter-spacing: -0.029em;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      height: 44px;
+    }
+    
+    .button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .button-scan {
+      background: rgba(120, 120, 128, 0.08);
+      color: #1E1E1E;
+      width: 239px;
+    }
+    
+    .button-scan:hover:not(:disabled) {
+      background: rgba(120, 120, 128, 0.15);
+    }
+    
+    .button-process {
+      background: #007AFF;
+      color: #ffffff;
+      width: 100%;
+    }
+    
+    .button-process:hover:not(:disabled) {
+      background: #0056CC;
+    }
+    
+    .button-cancel {
+      background: rgba(255, 59, 48, 0.09);
+      color: #FF3B30;
+      width: 100%;
+    }
+    
+    .button-cancel:hover:not(:disabled) {
+      background: rgba(255, 59, 48, 0.15);
+    }
+    
+    .button-create {
+      background: rgba(0, 122, 255, 0.09);
+      color: #007AFF;
+      width: 100%;
+    }
+    
+    .button-create:hover:not(:disabled) {
+      background: rgba(0, 122, 255, 0.15);
+    }
+    
+    .progress-container {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      height: 61px;
+    }
+    
+    .progress-bar {
+      width: 100px;
+      height: 6px;
+      background: rgba(120, 120, 128, 0.12);
+      border-radius: 500px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: #00C7BE;
+      border-radius: 500px;
+      transition: width 0.3s ease;
+    }
+    
+    .status-message {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
       padding: 8px 12px;
       border-radius: 4px;
       font-size: 12px;
+      text-align: center;
       display: none;
     }
     
-    .status.success {
+    .status-message.success {
       background: #e8f5e8;
       color: #2d5a2d;
       border: 1px solid #c3e6c3;
     }
     
-    .status.error {
+    .status-message.error {
       background: #ffeaea;
       color: #d32f2f;
       border: 1px solid #ffcdd2;
     }
     
-    .status.info {
+    .status-message.info {
       background: #e3f2fd;
       color: #1976d2;
       border: 1px solid #bbdefb;
     }
+    
+    .hidden {
+      display: none !important;
+    }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h2>Stringify</h2>
-    <p>Convert text layers to variables</p>
-  </div>
-  
-  <div class="section">
-    <h3>Variable Collection</h3>
-    <select id="collectionSelect" class="collection-select">
-      <option value="">Select a collection...</option>
-    </select>
-    <button id="createCollectionButton" class="button button-secondary" style="margin-top: 8px; width: 100%;">Create "Text to String" Collection</button>
-  </div>
-  
-  <div class="section">
-    <button id="scanButton" class="button button-primary">Scan Text Layers</button>
-    <button id="createVariablesButton" class="button button-secondary" disabled>Create Variables</button>
-  </div>
-  
-  <div class="section">
-    <div id="scanResults" style="display: none;">
-      <h3>Scan Results</h3>
-      <div id="scanStats" class="status info"></div>
+  <div class="plugin-container">
+    <!-- Collection Selection -->
+    <div class="collection-container">
+      <h3 class="collection-label">Variable Collection</h3>
+      <div class="collection-select" id="collectionSelect">
+        <span class="collection-text placeholder" id="collectionText">Select a collection.....</span>
+        <div class="dropdown-arrow placeholder" id="dropdownArrow"></div>
+      </div>
     </div>
+    
+    <!-- Text Counter -->
+    <div class="text-counter-container" id="textCounterContainer">
+      <div class="text-counter-number" id="textCounterNumber">0</div>
+      <div class="text-counter-label" id="textCounterLabel">Text layers scanned</div>
+    </div>
+    
+    <!-- Progress Container (hidden by default) -->
+    <div class="progress-container hidden" id="progressContainer">
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+    </div>
+    
+    <!-- Button Container -->
+    <div class="button-container">
+      <button class="button button-scan" id="scanButton">🔍 Rescan Text Layers</button>
+      <button class="button button-process hidden" id="processButton">Process Text Layers</button>
+      <button class="button button-cancel hidden" id="cancelButton">Stop Processing</button>
+      <button class="button button-create hidden" id="createButton">Create New Collection</button>
+    </div>
+    
+    <!-- Status Message -->
+    <div class="status-message" id="statusMessage"></div>
   </div>
-  
-  <div id="status" class="status"></div>
   
   <script>
+    // State management
+    let currentState = 'startup'; // startup, collection-selected, processing, completed
     let textLayers = [];
     let selectedCollection = null;
     let scanResults = null;
+    let collections = [];
+    let isProcessing = false;
     
-    // Load variable collections
-    function loadCollections() {
-      parent.postMessage({ pluginMessage: { type: 'get-collections' } }, '*');
+    // UI Elements
+    const elements = {
+      collectionSelect: document.getElementById('collectionSelect'),
+      collectionText: document.getElementById('collectionText'),
+      dropdownArrow: document.getElementById('dropdownArrow'),
+      textCounterNumber: document.getElementById('textCounterNumber'),
+      textCounterLabel: document.getElementById('textCounterLabel'),
+      textCounterContainer: document.getElementById('textCounterContainer'),
+      progressContainer: document.getElementById('progressContainer'),
+      progressFill: document.getElementById('progressFill'),
+      scanButton: document.getElementById('scanButton'),
+      processButton: document.getElementById('processButton'),
+      cancelButton: document.getElementById('cancelButton'),
+      createButton: document.getElementById('createButton'),
+      statusMessage: document.getElementById('statusMessage')
+    };
+    
+    // State management functions
+    function setState(newState) {
+      currentState = newState;
+      updateUI();
     }
     
-    // Show status message
-    function showStatus(message, type = 'info') {
-      const status = document.getElementById('status');
-      status.textContent = message;
-      status.className = `status ${type}`;
-      status.style.display = 'block';
-    }
-    
-    // Hide status message
-    function hideStatus() {
-      document.getElementById('status').style.display = 'none';
-    }
-    
-    // Show scan results
-    function showScanResults(validCount, totalCount) {
-      const scanResults = document.getElementById('scanResults');
-      const scanStats = document.getElementById('scanStats');
+    function updateUI() {
+      // Hide all buttons first
+      elements.scanButton.classList.add('hidden');
+      elements.processButton.classList.add('hidden');
+      elements.cancelButton.classList.add('hidden');
+      elements.createButton.classList.add('hidden');
+      elements.progressContainer.classList.add('hidden');
       
-      scanStats.innerHTML = `
-        <strong>Found ${validCount} valid text layers</strong><br>
-        <small>Out of ${totalCount} total text layers on the page</small>
-      `;
-      scanResults.style.display = 'block';
+      // Show appropriate elements based on state
+      switch (currentState) {
+        case 'startup':
+          elements.scanButton.classList.remove('hidden');
+          elements.createButton.classList.remove('hidden');
+          elements.textCounterLabel.textContent = 'Text layers scanned';
+          break;
+          
+        case 'collection-selected':
+          elements.scanButton.classList.remove('hidden');
+          elements.processButton.classList.remove('hidden');
+          elements.textCounterLabel.textContent = 'Text layers scanned';
+          break;
+          
+        case 'processing':
+          elements.cancelButton.classList.remove('hidden');
+          elements.progressContainer.classList.remove('hidden');
+          elements.textCounterLabel.textContent = 'Text layers to process';
+          break;
+          
+        case 'completed':
+          elements.scanButton.classList.remove('hidden');
+          elements.processButton.classList.remove('hidden');
+          elements.textCounterLabel.textContent = 'Text layers scanned';
+          break;
+      }
+    }
+    
+    // Collection selection
+    function showCollectionDropdown() {
+      // Create dropdown options
+      const options = collections.map(collection => 
+        `<div class="collection-option" data-id="${collection.id}">${collection.name}</div>`
+      ).join('');
+      
+      const dropdown = document.createElement('div');
+      dropdown.className = 'collection-dropdown';
+      dropdown.innerHTML = options;
+      
+      // Position dropdown
+      const rect = elements.collectionSelect.getBoundingClientRect();
+      dropdown.style.position = 'absolute';
+      dropdown.style.top = (rect.bottom + 4) + 'px';
+      dropdown.style.left = rect.left + 'px';
+      dropdown.style.width = rect.width + 'px';
+      dropdown.style.background = '#ffffff';
+      dropdown.style.border = '0.5px solid rgba(84, 84, 86, 0.34)';
+      dropdown.style.borderRadius = '8px';
+      dropdown.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+      dropdown.style.zIndex = '1000';
+      
+      document.body.appendChild(dropdown);
+      
+      // Handle option clicks
+      dropdown.querySelectorAll('.collection-option').forEach(option => {
+        option.addEventListener('click', () => {
+          const collectionId = option.dataset.id;
+          const collectionName = option.textContent;
+          selectCollection(collectionId, collectionName);
+          document.body.removeChild(dropdown);
+        });
+      });
+      
+      // Close dropdown when clicking outside
+      setTimeout(() => {
+        document.addEventListener('click', function closeDropdown() {
+          if (document.body.contains(dropdown)) {
+            document.body.removeChild(dropdown);
+          }
+          document.removeEventListener('click', closeDropdown);
+        });
+      }, 0);
+    }
+    
+    function selectCollection(collectionId, collectionName) {
+      selectedCollection = collectionId;
+      elements.collectionText.textContent = collectionName;
+      elements.collectionText.classList.remove('placeholder');
+      elements.dropdownArrow.classList.remove('placeholder');
+      
+      if (scanResults && scanResults.validCount > 0) {
+        setState('collection-selected');
+      } else {
+        setState('startup');
+      }
+    }
+    
+    function updateTextCounter(count, label) {
+      elements.textCounterNumber.textContent = count;
+      elements.textCounterLabel.textContent = label;
+    }
+    
+    function updateProgress(percentage) {
+      elements.progressFill.style.width = percentage + '%';
+    }
+    
+    function showStatus(message, type = 'info') {
+      elements.statusMessage.textContent = message;
+      elements.statusMessage.className = `status-message ${type}`;
+      elements.statusMessage.style.display = 'block';
+      
+      // Auto-hide after 3 seconds for success/info messages
+      if (type === 'success' || type === 'info') {
+        setTimeout(() => {
+          elements.statusMessage.style.display = 'none';
+        }, 3000);
+      }
+    }
+    
+    function hideStatus() {
+      elements.statusMessage.style.display = 'none';
     }
     
     // Event listeners
-    document.getElementById('collectionSelect').onchange = (e) => {
-      selectedCollection = e.target.value;
-      updateCreateButton();
-    };
+    elements.collectionSelect.addEventListener('click', () => {
+      if (collections.length > 0) {
+        showCollectionDropdown();
+      }
+    });
     
-    document.getElementById('createCollectionButton').onclick = () => {
-      hideStatus();
-      parent.postMessage({ pluginMessage: { type: 'create-default-collection' } }, '*');
-    };
-    
-    document.getElementById('scanButton').onclick = () => {
+    elements.scanButton.addEventListener('click', () => {
       hideStatus();
       parent.postMessage({ pluginMessage: { type: 'scan-text-layers' } }, '*');
-    };
+    });
     
-    document.getElementById('createVariablesButton').onclick = () => {
+    elements.processButton.addEventListener('click', () => {
       if (!selectedCollection) {
         showStatus('Please select a variable collection', 'error');
         return;
       }
       hideStatus();
+      setState('processing');
+      isProcessing = true;
       parent.postMessage({ 
         pluginMessage: { 
           type: 'create-variables', 
           collectionId: selectedCollection 
         } 
       }, '*');
-    };
+    });
     
-    function updateCreateButton() {
-      const button = document.getElementById('createVariablesButton');
-      if (selectedCollection && scanResults && scanResults.validCount > 0) {
-        button.disabled = false;
-        button.textContent = `Process ${scanResults.validCount} Text Layers`;
-      } else if (selectedCollection) {
-        button.disabled = true;
-        button.textContent = 'Scan Text Layers First';
-      } else {
-        button.disabled = true;
-        button.textContent = 'Select Collection First';
-      }
-    }
+    elements.cancelButton.addEventListener('click', () => {
+      isProcessing = false;
+      setState('collection-selected');
+      showStatus('Processing cancelled', 'info');
+    });
     
-    // Listen for messages from the plugin
+    elements.createButton.addEventListener('click', () => {
+      hideStatus();
+      parent.postMessage({ pluginMessage: { type: 'create-default-collection' } }, '*');
+    });
+    
+    // Message handling
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
       
       if (msg.type === 'collections-loaded') {
-        const select = document.getElementById('collectionSelect');
-        select.innerHTML = '<option value="">Select a collection...</option>';
-        
-        msg.collections.forEach(collection => {
-          const option = document.createElement('option');
-          option.value = collection.id;
-          option.textContent = collection.name;
-          select.appendChild(option);
-        });
-        updateCreateButton();
+        collections = msg.collections;
+        if (collections.length === 0) {
+          setState('startup');
+        }
       }
       
       if (msg.type === 'collection-created') {
-        // Refresh collections and select the new one
-        const select = document.getElementById('collectionSelect');
-        select.innerHTML = '<option value="">Select a collection...</option>';
-        
-        msg.collections.forEach(collection => {
-          const option = document.createElement('option');
-          option.value = collection.id;
-          option.textContent = collection.name;
-          if (collection.id === msg.collectionId) {
-            option.selected = true;
-            selectedCollection = collection.id;
-          }
-          select.appendChild(option);
-        });
-        
+        collections = msg.collections;
+        selectCollection(msg.collectionId, 'Text to String');
         showStatus('Collection created successfully!', 'success');
-        updateCreateButton();
       }
       
       if (msg.type === 'text-layers-found') {
         textLayers = msg.layers;
         scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
         
-        showScanResults(msg.validCount, msg.totalCount);
+        updateTextCounter(msg.validCount, 'Text layers scanned');
         
         if (msg.validCount === 0) {
           showStatus(`No valid text layers found. Found ${msg.totalCount} text layers total, but none are suitable for variable creation.`, 'error');
+          setState('startup');
         } else {
+          if (selectedCollection) {
+            setState('collection-selected');
+          } else {
+            setState('startup');
+          }
           showStatus(`Found ${msg.validCount} valid text layers ready for processing`, 'success');
         }
-        
-        updateCreateButton();
+      }
+      
+      if (msg.type === 'progress-update') {
+        if (isProcessing) {
+          updateTextCounter(msg.remaining, 'Text layers to process');
+          updateProgress(msg.progress);
+        }
       }
       
       if (msg.type === 'variables-created') {
+        isProcessing = false;
+        setState('completed');
+        
         let message = `✅ Processing Complete!\n`;
         message += `• Created: ${msg.created} new variables\n`;
         message += `• Connected: ${msg.connected} to existing variables\n`;
@@ -280,15 +530,20 @@
         message += `\nTotal processed: ${msg.totalProcessed} text layers`;
         
         showStatus(message, msg.errors > 0 ? 'error' : 'success');
+        updateTextCounter(scanResults.validCount, 'Text layers scanned');
       }
       
       if (msg.type === 'error') {
+        isProcessing = false;
+        setState('startup');
         showStatus(msg.message, 'error');
       }
     };
     
     // Initialize
-    loadCollections();
+    parent.postMessage({ pluginMessage: { type: 'get-collections' } }, '*');
+    parent.postMessage({ pluginMessage: { type: 'scan-text-layers' } }, '*');
+    setState('startup');
   </script>
 </body>
 </html>
