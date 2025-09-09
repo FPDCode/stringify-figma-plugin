@@ -9,10 +9,10 @@
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       margin: 0;
-      padding: 12px;
+      padding: 0;
       background: #ffffff;
       width: 271px;
-      height: 360px;
+      height: 398px;
       overflow: hidden;
     }
     
@@ -20,13 +20,14 @@
       display: flex;
       flex-direction: column;
       height: 100%;
-      gap: 6px;
+      padding: 20px;
+      gap: 16px;
     }
     
     .collection-container {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
     }
     
     .collection-label {
@@ -84,11 +85,11 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      padding: 6px;
+      padding: 20px;
       background: #ffffff;
       border-radius: 12px;
       flex: 1;
-      min-height: 60px;
+      min-height: 100px;
     }
     
     .text-counter-number {
@@ -112,10 +113,9 @@
     }
     
     .button-container {
-      height: 40px;
       display: flex;
       flex-direction: column;
-      gap: 0;
+      gap: 8px;
     }
     
     .button {
@@ -123,7 +123,7 @@
       justify-content: center;
       align-items: center;
       gap: 4px;
-      padding: 12px 32px;
+      padding: 16px 40px;
       border: none;
       border-radius: 12px;
       font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -209,15 +209,12 @@
     }
     
     .status-message {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
       padding: 8px 12px;
       border-radius: 4px;
       font-size: 12px;
       text-align: center;
       display: none;
+      margin-top: 8px;
     }
     
     .status-message.success {
