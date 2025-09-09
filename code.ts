@@ -2,7 +2,7 @@
 // This plugin scans text layers and creates corresponding variables
 
 // Show the UI
-figma.showUI(__html__, { width: 300, height: 400 });
+figma.showUI(__html__, { width: 380, height: 560 });
 
 // Enhanced text validation - only process text that starts with alphanumeric
 function isValidTextForVariable(text: string): boolean {
