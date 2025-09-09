@@ -119,6 +119,7 @@
     <select id="collectionSelect" class="collection-select">
       <option value="">Select a collection...</option>
     </select>
+    <button id="createCollectionButton" class="button button-secondary" style="margin-top: 8px; width: 100%;">Create "Text to String" Collection</button>
   </div>
   
   <div class="section">
@@ -126,11 +127,19 @@
     <button id="createVariablesButton" class="button button-secondary" disabled>Create Variables</button>
   </div>
   
+  <div class="section">
+    <div id="scanResults" style="display: none;">
+      <h3>Scan Results</h3>
+      <div id="scanStats" class="status info"></div>
+    </div>
+  </div>
+  
   <div id="status" class="status"></div>
   
   <script>
     let textLayers = [];
     let selectedCollection = null;
+    let scanResults = null;
     
     // Load variable collections
     function loadCollections() {
@@ -150,10 +159,27 @@
       document.getElementById('status').style.display = 'none';
     }
     
+    // Show scan results
+    function showScanResults(validCount, totalCount) {
+      const scanResults = document.getElementById('scanResults');
+      const scanStats = document.getElementById('scanStats');
+      
+      scanStats.innerHTML = `
+        <strong>Found ${validCount} valid text layers</strong><br>
+        <small>Out of ${totalCount} total text layers on the page</small>
+      `;
+      scanResults.style.display = 'block';
+    }
+    
     // Event listeners
     document.getElementById('collectionSelect').onchange = (e) => {
       selectedCollection = e.target.value;
-      document.getElementById('createVariablesButton').disabled = !selectedCollection;
+      updateCreateButton();
+    };
+    
+    document.getElementById('createCollectionButton').onclick = () => {
+      hideStatus();
+      parent.postMessage({ pluginMessage: { type: 'create-default-collection' } }, '*');
     };
     
     document.getElementById('scanButton').onclick = () => {
@@ -175,6 +201,20 @@
       }, '*');
     };
     
+    function updateCreateButton() {
+      const button = document.getElementById('createVariablesButton');
+      if (selectedCollection && scanResults && scanResults.validCount > 0) {
+        button.disabled = false;
+        button.textContent = `Process ${scanResults.validCount} Text Layers`;
+      } else if (selectedCollection) {
+        button.disabled = true;
+        button.textContent = 'Scan Text Layers First';
+      } else {
+        button.disabled = true;
+        button.textContent = 'Select Collection First';
+      }
+    }
+    
     // Listen for messages from the plugin
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
@@ -189,19 +229,56 @@
           option.textContent = collection.name;
           select.appendChild(option);
         });
+        updateCreateButton();
+      }
+      
+      if (msg.type === 'collection-created') {
+        // Refresh collections and select the new one
+        const select = document.getElementById('collectionSelect');
+        select.innerHTML = '<option value="">Select a collection...</option>';
+        
+        msg.collections.forEach(collection => {
+          const option = document.createElement('option');
+          option.value = collection.id;
+          option.textContent = collection.name;
+          if (collection.id === msg.collectionId) {
+            option.selected = true;
+            selectedCollection = collection.id;
+          }
+          select.appendChild(option);
+        });
+        
+        showStatus('Collection created successfully!', 'success');
+        updateCreateButton();
       }
       
       if (msg.type === 'text-layers-found') {
         textLayers = msg.layers;
-        showStatus(`Found ${msg.layers.length} text layers`, 'success');
-        document.getElementById('createVariablesButton').disabled = !selectedCollection;
+        scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
+        
+        showScanResults(msg.validCount, msg.totalCount);
+        
+        if (msg.validCount === 0) {
+          showStatus(`No valid text layers found. Found ${msg.totalCount} text layers total, but none are suitable for variable creation.`, 'error');
+        } else {
+          showStatus(`Found ${msg.validCount} valid text layers ready for processing`, 'success');
+        }
+        
+        updateCreateButton();
       }
       
       if (msg.type === 'variables-created') {
-        let message = `Created ${msg.created} variables, ${msg.connected} connected to existing`;
-        if (msg.errors > 0) {
-          message += `, ${msg.errors} errors`;
+        let message = `✅ Processing Complete!\n`;
+        message += `• Created: ${msg.created} new variables\n`;
+        message += `• Connected: ${msg.connected} to existing variables\n`;
+        if (msg.skipped > 0) {
+          message += `• Skipped: ${msg.skipped} empty layers\n`;
         }
+        if (msg.errors > 0) {
+          message += `• Errors: ${msg.errors} failed to process\n`;
+        }
+        message += `\nTotal processed: ${msg.totalProcessed} text layers`;
+        
         showStatus(message, msg.errors > 0 ? 'error' : 'success');
       }
       
