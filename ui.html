@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      padding: 16px;
+      margin: 0;
+      background: #ffffff;
+    }
+    
+    .header {
+      margin-bottom: 20px;
+    }
+    
+    .header h2 {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e1e1e;
+    }
+    
+    .header p {
+      margin: 0;
+      font-size: 12px;
+      color: #8c8c8c;
+    }
+    
+    .section {
+      margin-bottom: 16px;
+    }
+    
+    .section h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      font-weight: 500;
+      color: #1e1e1e;
+    }
+    
+    .collection-select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #ffffff;
+    }
+    
+    .collection-select:focus {
+      outline: none;
+      border-color: #0c8ce9;
+    }
+    
+    .button {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .button-primary {
+      background: #0c8ce9;
+      color: white;
+    }
+    
+    .button-primary:hover {
+      background: #0a7bc7;
+    }
+    
+    .button-secondary {
+      background: #f3f3f3;
+      color: #1e1e1e;
+      margin-top: 8px;
+    }
+    
+    .button-secondary:hover {
+      background: #e5e5e5;
+    }
+    
+    .status {
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      display: none;
+    }
+    
+    .status.success {
+      background: #e8f5e8;
+      color: #2d5a2d;
+      border: 1px solid #c3e6c3;
+    }
+    
+    .status.error {
+      background: #ffeaea;
+      color: #d32f2f;
+      border: 1px solid #ffcdd2;
+    }
+    
+    .status.info {
+      background: #e3f2fd;
+      color: #1976d2;
+      border: 1px solid #bbdefb;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>Stringify</h2>
+    <p>Convert text layers to variables</p>
+  </div>
+  
+  <div class="section">
+    <h3>Variable Collection</h3>
+    <select id="collectionSelect" class="collection-select">
+      <option value="">Select a collection...</option>
+    </select>
+  </div>
+  
+  <div class="section">
+    <button id="scanButton" class="button button-primary">Scan Text Layers</button>
+    <button id="createVariablesButton" class="button button-secondary" disabled>Create Variables</button>
+  </div>
+  
+  <div id="status" class="status"></div>
+  
+  <script>
+    let textLayers = [];
+    let selectedCollection = null;
+    
+    // Load variable collections
+    function loadCollections() {
+      parent.postMessage({ pluginMessage: { type: 'get-collections' } }, '*');
+    }
+    
+    // Show status message
+    function showStatus(message, type = 'info') {
+      const status = document.getElementById('status');
+      status.textContent = message;
+      status.className = `status ${type}`;
+      status.style.display = 'block';
+    }
+    
+    // Hide status message
+    function hideStatus() {
+      document.getElementById('status').style.display = 'none';
+    }
+    
+    // Event listeners
+    document.getElementById('collectionSelect').onchange = (e) => {
+      selectedCollection = e.target.value;
+      document.getElementById('createVariablesButton').disabled = !selectedCollection;
+    };
+    
+    document.getElementById('scanButton').onclick = () => {
+      hideStatus();
+      parent.postMessage({ pluginMessage: { type: 'scan-text-layers' } }, '*');
+    };
+    
+    document.getElementById('createVariablesButton').onclick = () => {
+      if (!selectedCollection) {
+        showStatus('Please select a variable collection', 'error');
+        return;
+      }
+      hideStatus();
+      parent.postMessage({ 
+        pluginMessage: { 
+          type: 'create-variables', 
+          collectionId: selectedCollection 
+        } 
+      }, '*');
+    };
+    
+    // Listen for messages from the plugin
+    window.onmessage = (event) => {
+      const msg = event.data.pluginMessage;
+      
+      if (msg.type === 'collections-loaded') {
+        const select = document.getElementById('collectionSelect');
+        select.innerHTML = '<option value="">Select a collection...</option>';
+        
+        msg.collections.forEach(collection => {
+          const option = document.createElement('option');
+          option.value = collection.id;
+          option.textContent = collection.name;
+          select.appendChild(option);
+        });
+      }
+      
+      if (msg.type === 'text-layers-found') {
+        textLayers = msg.layers;
+        showStatus(`Found ${msg.layers.length} text layers`, 'success');
+        document.getElementById('createVariablesButton').disabled = !selectedCollection;
+      }
+      
+      if (msg.type === 'variables-created') {
+        let message = `Created ${msg.created} variables, ${msg.connected} connected to existing`;
+        if (msg.errors > 0) {
+          message += `, ${msg.errors} errors`;
+        }
+        showStatus(message, msg.errors > 0 ? 'error' : 'success');
+      }
+      
+      if (msg.type === 'error') {
+        showStatus(msg.message, 'error');
+      }
+    };
+    
+    // Initialize
+    loadCollections();
+  </script>
+</body>
+</html>
