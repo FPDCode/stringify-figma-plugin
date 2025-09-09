@@ -19,15 +19,18 @@
     .plugin-container {
       display: flex;
       flex-direction: column;
+      justify-content: flex-end;
       height: 100%;
-      padding: 20px;
-      gap: 16px;
+      padding: 16px;
+      gap: 8px;
     }
     
     .collection-container {
       display: flex;
       flex-direction: column;
+      align-self: stretch;
       gap: 8px;
+      height: 58px;
     }
     
     .collection-label {
@@ -43,12 +46,14 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      align-self: stretch;
       padding: 8px 16px;
       border: 0.5px solid rgba(84, 84, 86, 0.34);
       border-radius: 8px;
       background: #ffffff;
       cursor: pointer;
       transition: all 0.2s;
+      height: 42px;
     }
     
     .collection-select:hover {
@@ -85,11 +90,11 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      padding: 20px;
+      align-self: stretch;
+      padding: 8px;
       background: #ffffff;
       border-radius: 12px;
       flex: 1;
-      min-height: 100px;
     }
     
     .text-counter-number {
@@ -115,7 +120,8 @@
     .button-container {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      height: 44px;
+      width: 100%;
     }
     
     .button {
@@ -129,6 +135,8 @@
       font-family: 'SF Pro', -apple-system, BlinkMacSystemFont, sans-serif;
       font-weight: 510;
       font-size: 15px;
+      height: 44px;
+      width: 100%;
       line-height: 1.47;
       letter-spacing: -0.029em;
       text-align: center;
