@@ -552,12 +552,14 @@
       switch (currentState) {
         case 'startup':
           elements.scanButton.classList.remove('hidden');
+          // Show create button when no collection is selected
           elements.createButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Text layers scanned';
           break;
           
         case 'collection-selected':
           elements.scanButton.classList.remove('hidden');
+          // Show process button when collection is selected
           elements.processButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Text layers ready';
           break;
@@ -571,6 +573,7 @@
           
         case 'completed':
           elements.scanButton.classList.remove('hidden');
+          // Show process button after completion
           elements.processButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Processing completed';
           isProcessing = false;
@@ -578,19 +581,36 @@
           
         case 'error':
           elements.scanButton.classList.remove('hidden');
+          // Show create button on error
           elements.createButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Ready to scan';
           isProcessing = false;
           break;
       }
       
-      // Update process button text and state
-      if (scanResults && selectedCollection) {
+      // Update button text and state based on collection selection
+      updateDynamicButton();
+    }
+    
+    function updateDynamicButton() {
+      if (selectedCollection && scanResults && scanResults.validCount > 0) {
+        // Collection selected and text layers found - show process button
         elements.processButton.textContent = `Process ${scanResults.validCount} Text Layers`;
-        elements.processButton.disabled = scanResults.validCount === 0;
-      } else {
-        elements.processButton.textContent = 'Select Collection First';
+        elements.processButton.disabled = false;
+        elements.createButton.classList.add('hidden');
+        elements.processButton.classList.remove('hidden');
+      } else if (selectedCollection) {
+        // Collection selected but no text layers - show process button (disabled)
+        elements.processButton.textContent = 'No Text Layers Found';
         elements.processButton.disabled = true;
+        elements.createButton.classList.add('hidden');
+        elements.processButton.classList.remove('hidden');
+      } else {
+        // No collection selected - show create button
+        elements.createButton.textContent = 'Create New Collection';
+        elements.createButton.disabled = false;
+        elements.processButton.classList.add('hidden');
+        elements.createButton.classList.remove('hidden');
       }
     }
     
@@ -623,6 +643,9 @@
     function selectCollection(collectionId) {
       selectedCollection = collectionId;
       elements.collectionSelect.value = collectionId;
+      
+      // Update the dynamic button based on new selection
+      updateDynamicButton();
       
       if (scanResults && scanResults.validCount > 0) {
         setState('collection-selected');
@@ -694,6 +717,12 @@
       if (e.target.value) {
         selectCollection(e.target.value);
         hideStatus();
+      } else {
+        // Collection selection cleared
+        selectedCollection = null;
+        updateDynamicButton();
+        setState('startup');
+        hideStatus();
       }
     });
     
@@ -763,6 +792,7 @@
         case 'collections-loaded':
           collections = msg.collections;
           populateCollectionSelect();
+          updateDynamicButton(); // Update button based on current state
           if (collections.length === 0) {
             showStatus('No variable collections found. Create one to get started.', 'warning');
             setState('startup');
@@ -781,6 +811,7 @@
           scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
           
           updateTextCounter(msg.validCount);
+          updateDynamicButton(); // Update button based on scan results
           
           if (msg.validCount === 0) {
             const message = msg.totalCount > 0 
