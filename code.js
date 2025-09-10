@@ -120,7 +120,7 @@ function createHierarchicalVariableName(text, textNode) {
         parts.push(group1);
     }
     parts.push(textName);
-    return parts.join('_');
+    return parts.join('/');
 }
 function sanitizeName(name) {
     if (!name || name.trim().length === 0) {

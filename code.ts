@@ -205,7 +205,7 @@ function createHierarchicalVariableName(text: string, textNode: TextNode): strin
   
   parts.push(textName);
   
-  return parts.join('_');
+  return parts.join('/');
 }
 
 function sanitizeName(name: string): string {
