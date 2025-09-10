@@ -864,6 +864,11 @@
           const message = parts.length > 0 ? parts.join(', ') : 'Processing completed';
           showStatus(`✅ Success: ${message}`, 'success', 5000);
           updateTextCounter(result.totalProcessed, 'Variables processed');
+          
+          // Auto-rescan after processing to show updated eligible text layers
+          setTimeout(() => {
+            sendMessage({ type: 'scan-text-layers' });
+          }, 1000); // Wait 1 second to let the success message show
           break;
           
         case 'error':
