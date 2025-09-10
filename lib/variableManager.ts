@@ -150,7 +150,7 @@ export function findExistingVariable(
   return existingVariables.get(key) || null;
 }
 
-export function createVariableCache(collectionId: string): Map<string, VariableCacheEntry> {
+export function createVariableCache(): Map<string, VariableCacheEntry> {
   return new Map<string, VariableCacheEntry>();
 }
 

@@ -1,23 +1,36 @@
 # Stringify - Figma Plugin
 
-A Figma plugin that automatically converts text layers to string variables, streamlining your design system workflow.
+A robust Figma plugin that automatically converts text layers to string variables with enhanced UX, accessibility, and professional-grade features.
 
-## Features
+## 🚀 Features
 
-- 🔍 **Scan Text Layers**: Automatically finds all text layers on the current page
-- 🔄 **Create Variables**: Converts text content to string variables (camelCase format)
-- 🔗 **Auto-Connect**: Binds text layers to their corresponding variables
-- ♻️ **Smart Duplicates**: Connects to existing variables instead of creating duplicates
-- 📊 **Progress Feedback**: Shows detailed information about the conversion process
-- ⚠️ **Error Handling**: Gracefully handles errors and provides helpful feedback
+### Core Functionality
+- **Text Layer Scanning**: Automatically scans and identifies eligible text layers
+- **Variable Creation**: Converts text layers to Figma string variables
+- **Smart Naming**: Intelligent variable naming with conflict resolution
+- **Batch Processing**: Efficient processing of large numbers of text layers
+- **Duplicate Detection**: Prevents duplicate variables and connects to existing ones
 
-## Installation
+### Enhanced User Experience
+- **Dynamic UI**: Smart button behavior that adapts to user context
+- **Real-time Progress**: Live progress tracking with remaining count
+- **Auto-rescan**: Automatic page refresh after processing completion
+- **Status Messages**: Comprehensive feedback with success, error, and warning states
+- **Processing States**: Clean, locked interface during operations
+
+### Accessibility & Quality
+- **WCAG Compliant**: Full screen reader and keyboard navigation support
+- **ARIA Labels**: Comprehensive labeling for all interactive elements
+- **Type Safety**: Full TypeScript integration with comprehensive interfaces
+- **Error Handling**: Robust error management with detailed context
+- **Performance**: Variable caching and optimized batch processing
+
+## 📦 Installation
 
 ### For Development
-
-1. Clone this repository:
+1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/stringify-figma-plugin.git
+   git clone https://github.com/FPDCode/stringify-figma-plugin.git
    cd stringify-figma-plugin
    ```
 
@@ -32,101 +45,154 @@ A Figma plugin that automatically converts text layers to string variables, stre
    ```
 
 4. Load the plugin in Figma:
-   - Open Figma Desktop App
+   - Open Figma Desktop
    - Go to Plugins → Development → Import plugin from manifest
-   - Select the `manifest.json` file from this repository
+   - Select the `manifest.json` file from the project root
 
 ### For Production
+The plugin is ready for distribution through Figma's plugin marketplace.
 
-1. Download the latest release from the [Releases page](https://github.com/yourusername/stringify-figma-plugin/releases)
-2. Follow Figma's plugin installation instructions
+## 🛠️ Development
 
-## Usage
+### Available Scripts
 
-1. **Open a Figma file** with text layers that you want to convert to variables
-2. **Create a Variable Collection** (if you don't have one):
-   - Go to the Variables panel (right sidebar)
-   - Click the "+" button to create a new collection
-3. **Run the Plugin**:
-   - Go to Plugins → Stringify
-   - Select your variable collection from the dropdown
-   - Click "Scan Text Layers" to see how many text layers are found
-   - Click "Create Variables" to convert text layers to variables
+- `npm run build` - Build the plugin for production
+- `npm run dev` - Start development mode with file watching
+- `npm run watch` - Watch for file changes and rebuild automatically
+- `npm run lint` - Run ESLint to check code quality
+- `npm run lint:fix` - Fix ESLint issues automatically
+- `npm run type-check` - Run TypeScript type checking
+- `npm run validate` - Run both linting and type checking
+- `npm run clean` - Clean the build directory
 
-## How It Works
+### Development Workflow
 
-1. **Text Layer Detection**: The plugin scans all text layers on the current page
-2. **Content Processing**: Text content is converted to camelCase for variable names
-3. **Variable Creation**: New string variables are created in your selected collection
-4. **Auto-Binding**: Text layers are automatically connected to their variables
-5. **Duplicate Handling**: If a variable with the same name and value exists, it connects instead of creating a duplicate
+1. **Start Development**:
+   ```bash
+   npm run dev
+   ```
 
-## Text Processing
+2. **Make Changes**: Edit TypeScript files in the `lib/` directory or `code.ts`
 
-The plugin converts text content to camelCase variable names:
-- `"Hello World"` → `helloWorld`
-- `"User Name"` → `userName`
-- `"API Key"` → `apiKey`
-- `"Error Message!"` → `errorMessage`
+3. **Auto-rebuild**: Files are automatically watched and rebuilt
 
-## Requirements
-
-- Figma Desktop App (latest version)
-- A Figma file with text layers
-- A Variable Collection (created in Figma)
-
-## Development
-
-### Scripts
-
-- `npm run build` - Compile TypeScript to JavaScript
-- `npm run watch` - Watch for changes and rebuild automatically
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint errors automatically
+4. **Test in Figma**: Reload the plugin in Figma to see changes
 
 ### Project Structure
 
 ```
 stringify-figma-plugin/
-├── code.ts              # Main plugin logic
-├── ui.html              # Plugin UI
-├── manifest.json        # Plugin manifest
-├── package.json         # Dependencies and scripts
-├── tsconfig.json        # TypeScript configuration
-└── README.md           # This file
+├── lib/                    # Modular architecture
+│   ├── types.ts           # TypeScript interfaces
+│   ├── constants.ts       # Configuration constants
+│   ├── textProcessor.ts   # Text processing logic
+│   └── variableManager.ts # Variable operations
+├── code.ts                # Main plugin controller
+├── ui.html               # Plugin user interface
+├── manifest.json         # Plugin manifest
+├── package.json          # Dependencies and scripts
+├── tsconfig.json         # TypeScript configuration
+├── dist/                 # Build output directory
+└── README.md            # This file
 ```
 
-## Contributing
+## 🎯 Usage
+
+### Basic Workflow
+
+1. **Open Plugin**: Launch Stringify from the Figma plugins menu
+2. **Select Collection**: Choose a variable collection or create a new one
+3. **Scan Layers**: Click "Rescan Text Layers" to find eligible text layers
+4. **Process**: Click "Process X Text Layers" to convert them to variables
+5. **Review**: Check the success message and updated layer count
+
+### Smart Button Behavior
+
+- **No Collection Selected**: Shows green "Create New Collection" button
+- **Collection Selected**: Shows blue "Process X Text Layers" button
+- **During Processing**: Only "Stop Processing" button is visible
+- **After Processing**: Auto-rescans to show remaining layers
+
+### Text Layer Eligibility
+
+Text layers are eligible for variable creation if they:
+- Start with alphanumeric characters
+- Are not already bound to variables
+- Are not locked or hidden
+- Contain valid text content
+
+## 🔧 Configuration
+
+### Plugin Settings
+
+The plugin can be configured through constants in `lib/constants.ts`:
+
+```typescript
+const PLUGIN_CONFIG = {
+  BATCH_SIZE: 10,                    // Items processed per batch
+  MAX_VARIABLE_NAME_LENGTH: 50,      // Maximum variable name length
+  DEFAULT_COLLECTION_NAME: "Text to String", // Default collection name
+  PROGRESS_UPDATE_DELAY: 10,         // Delay between progress updates
+  UI_DIMENSIONS: {
+    width: 380,                       // Plugin window width
+    height: 560                       // Plugin window height
+  }
+}
+```
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Plugin Not Loading**: Ensure all dependencies are installed and the build is successful
+2. **No Text Layers Found**: Check that text layers start with alphanumeric characters
+3. **Processing Errors**: Verify that the selected collection exists and is accessible
+4. **Performance Issues**: Reduce batch size in configuration for large datasets
+
+### Debug Mode
+
+Enable debug logging by opening the browser console in Figma:
+1. Right-click in Figma → Inspect Element
+2. Go to Console tab
+3. Look for Stringify plugin logs
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes
-4. Commit your changes: `git commit -m 'Add some feature'`
-5. Push to the branch: `git push origin feature-name`
-6. Submit a pull request
+3. Make your changes and test thoroughly
+4. Run the build process: `npm run build`
+5. Commit your changes: `git commit -m "Add feature"`
+6. Push to the branch: `git push origin feature-name`
+7. Submit a pull request
 
-## License
+### Code Quality Standards
+
+- All code must pass ESLint checks: `npm run lint`
+- TypeScript types must be valid: `npm run type-check`
+- Follow the existing code style and patterns
+- Add appropriate error handling and user feedback
+- Include accessibility features for new UI elements
+
+## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Changelog
+## 🙏 Acknowledgments
 
-### V1.0.0
-- Initial release
-- Text layer scanning functionality
-- Variable creation and binding
-- Error handling and user feedback
-- Smart duplicate detection
+- Built for the Figma plugin ecosystem
+- Designed with accessibility and user experience in mind
+- Inspired by modern development practices and clean architecture
 
-## Support
+## 📞 Support
 
-If you encounter any issues or have questions:
+For issues, feature requests, or questions:
+- Create an issue on [GitHub](https://github.com/FPDCode/stringify-figma-plugin/issues)
+- Check the troubleshooting section above
+- Review the development documentation
 
-1. Check the [Issues page](https://github.com/yourusername/stringify-figma-plugin/issues) for known problems
-2. Create a new issue with detailed information about your problem
-3. Include Figma version, plugin version, and steps to reproduce
+---
 
-## Acknowledgments
-
-- Built with [Figma Plugin API](https://www.figma.com/plugin-docs/)
-- TypeScript support via [@figma/plugin-typings](https://www.npmjs.com/package/@figma/plugin-typings)
+**Version**: 2.0.0  
+**Author**: FPDCode  
+**License**: MIT

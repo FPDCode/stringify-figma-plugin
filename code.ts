@@ -1,30 +1,392 @@
 // Stringify Plugin - Convert text layers to variables
-// Enhanced V2 implementation with modular architecture
+// Enhanced V2 implementation with consolidated architecture
 
-import { 
-  MessageFromUI, 
-  MessageToUI, 
-  ProcessingStats, 
-  ProcessingResult,
-  PluginError 
-} from './lib/types';
-import { PLUGIN_CONFIG, UI_MESSAGES } from './lib/constants';
-import { 
-  getValidTextLayers, 
-  validateTextLayer,
-  preprocessTextForVariable
-} from './lib/textProcessor';
-import {
-  getVariableCollections,
-  createDefaultCollection,
-  getExistingVariables,
-  createStringVariable,
-  bindTextNodeToVariable,
-  findExistingVariable,
-  createVariableCache,
-  addToVariableCache,
-  getFromVariableCache
-} from './lib/variableManager';
+// ============================================================================
+// TYPES AND INTERFACES
+// ============================================================================
+
+interface ProcessingStats {
+  created: number;
+  connected: number;
+  skipped: number;
+  errors: number;
+}
+
+interface CollectionInfo {
+  id: string;
+  name: string;
+  variables: string[];
+}
+
+interface TextLayerInfo {
+  id: string;
+  name: string;
+  characters: string;
+  node?: TextNode;
+}
+
+interface ProcessingResult extends ProcessingStats {
+  totalProcessed: number;
+}
+
+type MessageFromUI = 
+  | { type: 'get-collections' }
+  | { type: 'scan-text-layers' }
+  | { type: 'create-variables'; collectionId: string }
+  | { type: 'create-default-collection' };
+
+type MessageToUI = 
+  | { type: 'collections-loaded'; collections: CollectionInfo[] }
+  | { type: 'collection-created'; collectionId: string; collections: CollectionInfo[] }
+  | { type: 'text-layers-found'; layers: TextLayerInfo[]; validCount: number; totalCount: number }
+  | { type: 'progress-update'; progress: number; remaining: number }
+  | { type: 'variables-created'; result: ProcessingResult }
+  | { type: 'error'; message: string };
+
+class PluginError extends Error {
+  public readonly code?: string;
+  public readonly context?: Record<string, unknown>;
+
+  constructor(message: string, options?: { code?: string; context?: Record<string, unknown> }) {
+    super(message);
+    this.name = 'PluginError';
+    this.code = options?.code;
+    this.context = options?.context;
+  }
+}
+
+interface TextProcessingResult {
+  original: string;
+  processed: string;
+  variableName: string;
+}
+
+interface VariableCacheEntry {
+  variable: Variable;
+  name: string;
+  content: string;
+}
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const PLUGIN_CONFIG = {
+  BATCH_SIZE: 10,
+  MAX_VARIABLE_NAME_LENGTH: 50,
+  DEFAULT_COLLECTION_NAME: "Text to String",
+  PROGRESS_UPDATE_DELAY: 10,
+  UI_DIMENSIONS: {
+    width: 380,
+    height: 560
+  }
+} as const;
+
+const ERROR_CODES = {
+  COLLECTION_NOT_FOUND: 'COLLECTION_NOT_FOUND',
+  INVALID_TEXT: 'INVALID_TEXT',
+  VARIABLE_CREATION_FAILED: 'VARIABLE_CREATION_FAILED',
+  BINDING_FAILED: 'BINDING_FAILED',
+  NO_VALID_LAYERS: 'NO_VALID_LAYERS',
+  PROCESSING_IN_PROGRESS: 'PROCESSING_IN_PROGRESS',
+  COLLECTION_ID_REQUIRED: 'COLLECTION_ID_REQUIRED'
+} as const;
+
+const UI_MESSAGES = {
+  SCANNING: 'Scanning text layers...',
+  PROCESSING: 'Creating variables...',
+  COMPLETED: 'Processing completed successfully',
+  NO_COLLECTIONS: 'No variable collections found',
+  NO_LAYERS: 'No valid text layers found',
+  SELECT_COLLECTION: 'Please select a collection first',
+  PROCESSING_IN_PROGRESS: 'Processing is already in progress',
+  COLLECTION_CREATED: 'Collection created successfully',
+  VARIABLES_CREATED: 'Variables created successfully'
+} as const;
+
+const VARIABLE_NAME_PATTERNS = {
+  SAFE_CHARS: /[A-Za-z0-9_]/,
+  REPLACE_CHARS: /[^A-Za-z0-9_]/g,
+  MULTIPLE_UNDERSCORES: /_{2,}/g,
+  EDGE_UNDERSCORES: /^_+|_+$/g
+} as const;
+
+// ============================================================================
+// TEXT PROCESSING FUNCTIONS
+// ============================================================================
+
+function isValidTextForVariable(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed || trimmed.length === 0) return false;
+  
+  const firstChar = trimmed[0];
+  return VARIABLE_NAME_PATTERNS.SAFE_CHARS.test(firstChar);
+}
+
+function createVariableName(text: string): string {
+  if (!text || text.trim().length === 0) {
+    throw new PluginError('Cannot create variable name from empty text', {
+      code: ERROR_CODES.INVALID_TEXT
+    });
+  }
+
+  let processed = text
+    .trim()
+    .toLowerCase()
+    .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '')
+    .replace(/\s+/g, '_')
+    .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
+    .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
+
+  if (!processed) {
+    processed = 'text_variable';
+  }
+
+  if (processed.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
+    return truncateVariableName(processed);
+  }
+
+  return processed;
+}
+
+function truncateVariableName(text: string): string {
+  const maxLength = PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH;
+  const separator = '___';
+  const availableLength = maxLength - separator.length;
+  
+  const startLength = Math.ceil(availableLength * 0.6);
+  const endLength = Math.floor(availableLength * 0.4);
+  
+  const start = text.substring(0, startLength);
+  const end = text.substring(text.length - endLength);
+  
+  return `${start}${separator}${end}`;
+}
+
+function validateTextLayer(node: TextNode): boolean {
+  try {
+    if (node.boundVariables?.characters) {
+      return false;
+    }
+    
+    if (node.locked || !node.visible) {
+      return false;
+    }
+    
+    return isValidTextForVariable(node.characters);
+  } catch (error) {
+    console.warn(`Error validating text layer ${node.id}:`, error);
+    return false;
+  }
+}
+
+function getValidTextLayers(): { 
+  layers: TextNode[], 
+  validCount: number, 
+  totalCount: number 
+} {
+  try {
+    const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
+    const validTextNodes = allTextNodes.filter(validateTextLayer);
+    
+    return {
+      layers: validTextNodes,
+      validCount: validTextNodes.length,
+      totalCount: allTextNodes.length
+    };
+  } catch (error) {
+    console.error('Error scanning text layers:', error);
+    throw new PluginError('Failed to scan text layers');
+  }
+}
+
+function preprocessTextForVariable(text: string): TextProcessingResult {
+  const trimmed = text.trim();
+  return {
+    original: text,
+    processed: trimmed,
+    variableName: createVariableName(trimmed)
+  };
+}
+
+// ============================================================================
+// VARIABLE MANAGEMENT FUNCTIONS
+// ============================================================================
+
+async function getVariableCollections(): Promise<CollectionInfo[]> {
+  try {
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    
+    return collections.map(collection => ({
+      id: collection.id,
+      name: collection.name,
+      variables: collection.variableIds
+    }));
+  } catch (error) {
+    console.error('Error getting variable collections:', error);
+    throw new PluginError('Failed to load variable collections');
+  }
+}
+
+async function createDefaultCollection(): Promise<string> {
+  try {
+    let collectionName: string = PLUGIN_CONFIG.DEFAULT_COLLECTION_NAME;
+    let counter = 1;
+    
+    const existingCollections = await figma.variables.getLocalVariableCollectionsAsync();
+    const existingNames = new Set(existingCollections.map(c => c.name));
+    
+    while (existingNames.has(collectionName)) {
+      collectionName = `${PLUGIN_CONFIG.DEFAULT_COLLECTION_NAME} ${++counter}`;
+    }
+    
+    const collection = figma.variables.createVariableCollection(collectionName);
+    return collection.id;
+  } catch (error) {
+    console.error('Error creating default collection:', error);
+    throw new PluginError('Failed to create default collection');
+  }
+}
+
+async function validateCollection(collectionId: string): Promise<VariableCollection> {
+  const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+  
+  if (!collection) {
+    throw new PluginError('Collection not found or has been deleted', { 
+      code: ERROR_CODES.COLLECTION_NOT_FOUND,
+      context: { collectionId }
+    });
+  }
+  
+  return collection;
+}
+
+async function getExistingVariables(collectionId: string): Promise<Map<string, Variable>> {
+  try {
+    const collection = await validateCollection(collectionId);
+    const variableMap = new Map<string, Variable>();
+    
+    for (const variableId of collection.variableIds) {
+      try {
+        const variable = await figma.variables.getVariableByIdAsync(variableId);
+        if (variable && variable.resolvedType === 'STRING') {
+          const key = `${variable.name}:${variable.valuesByMode[collection.defaultModeId]}`;
+          variableMap.set(key, variable);
+        }
+      } catch (error) {
+        console.warn(`Could not load variable ${variableId}:`, error);
+      }
+    }
+    
+    return variableMap;
+  } catch (error) {
+    if (error instanceof PluginError) throw error;
+    throw new PluginError('Failed to load existing variables');
+  }
+}
+
+async function createStringVariable(
+  collectionId: string, 
+  variableName: string, 
+  content: string
+): Promise<Variable> {
+  try {
+    const collection = await validateCollection(collectionId);
+    
+    const existingVariables = await getExistingVariables(collectionId);
+    const nameConflicts = Array.from(existingVariables.keys())
+      .filter(key => key.startsWith(`${variableName}:`));
+    
+    let finalVariableName = variableName;
+    if (nameConflicts.length > 0) {
+      finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
+    }
+    
+    const variable = figma.variables.createVariable(finalVariableName, collection, 'STRING');
+    variable.setValueForMode(collection.defaultModeId, content);
+    
+    return variable;
+  } catch (error) {
+    console.error(`Error creating variable "${variableName}":`, error);
+    throw new PluginError(
+      `Failed to create variable: ${variableName}`, 
+      { 
+        code: ERROR_CODES.VARIABLE_CREATION_FAILED, 
+        context: { variableName, content, originalError: error instanceof Error ? error.message : String(error) } 
+      }
+    );
+  }
+}
+
+function bindTextNodeToVariable(textNode: TextNode, variable: Variable): void {
+  try {
+    if (textNode.removed) {
+      throw new Error('Text node has been removed');
+    }
+    
+    if (textNode.locked) {
+      throw new Error('Text node is locked');
+    }
+    
+    textNode.setBoundVariable('characters', variable);
+  } catch (error) {
+    console.error(`Error binding text node ${textNode.id} to variable ${variable.id}:`, error);
+    throw new PluginError(
+      'Failed to bind text node to variable', 
+      { 
+        code: ERROR_CODES.BINDING_FAILED, 
+        context: { 
+          nodeId: textNode.id, 
+          nodeName: textNode.name,
+          variableId: variable.id, 
+          variableName: variable.name,
+          originalError: error instanceof Error ? error.message : String(error)
+        } 
+      }
+    );
+  }
+}
+
+function findExistingVariable(
+  existingVariables: Map<string, Variable>, 
+  variableName: string, 
+  content: string
+): Variable | null {
+  const key = `${variableName}:${content}`;
+  return existingVariables.get(key) || null;
+}
+
+function createVariableCache(): Map<string, VariableCacheEntry> {
+  return new Map<string, VariableCacheEntry>();
+}
+
+function addToVariableCache(
+  cache: Map<string, VariableCacheEntry>,
+  variable: Variable,
+  collection: VariableCollection
+): void {
+  const key = `${variable.name}:${variable.valuesByMode[collection.defaultModeId]}`;
+  const content = variable.valuesByMode[collection.defaultModeId];
+  cache.set(key, {
+    variable,
+    name: variable.name,
+    content: typeof content === 'string' ? content : String(content)
+  });
+}
+
+function getFromVariableCache(
+  cache: Map<string, VariableCacheEntry>,
+  variableName: string,
+  content: string
+): Variable | null {
+  const key = `${variableName}:${content}`;
+  const entry = cache.get(key);
+  return entry ? entry.variable : null;
+}
+
+// ============================================================================
+// MAIN PLUGIN LOGIC
+// ============================================================================
 
 // Plugin state management
 let isProcessing = false;
@@ -61,7 +423,7 @@ async function handleMessage(msg: MessageFromUI): Promise<void> {
       await handleCreateDefaultCollection();
       break;
     default:
-      throw new Error(`Unknown message type: ${(msg as any).type}`);
+      throw new Error(`Unknown message type: ${(msg as { type: string }).type}`);
   }
 }
 
@@ -129,7 +491,6 @@ async function handleCreateVariables(collectionId: string): Promise<void> {
       result
     });
 
-    // Show completion notification
     const summary = createProcessingSummary(result);
     figma.notify(summary, { timeout: 5000 });
     
@@ -167,7 +528,7 @@ async function processTextLayersWithProgress(
   };
 
   const existingVariables = await getExistingVariables(collectionId);
-  const variableCache = createVariableCache(collectionId);
+  const variableCache = createVariableCache();
   const totalLayers = textLayers.length;
   const errors: Array<{ layer: string; error: string }> = [];
 
@@ -187,7 +548,6 @@ async function processTextLayersWithProgress(
       }
     }
     
-    // Send progress update
     const processed = Math.min(i + PLUGIN_CONFIG.BATCH_SIZE, totalLayers);
     const progress = Math.round((processed / totalLayers) * 100);
     const remaining = totalLayers - processed;
@@ -198,11 +558,9 @@ async function processTextLayersWithProgress(
       remaining
     });
     
-    // Small delay to prevent UI freezing
     await new Promise(resolve => setTimeout(resolve, PLUGIN_CONFIG.PROGRESS_UPDATE_DELAY));
   }
 
-  // Log errors for debugging
   if (errors.length > 0) {
     console.warn('Processing errors:', errors);
   }
@@ -216,11 +574,10 @@ async function processTextLayersWithProgress(
 async function processTextLayer(
   textLayer: TextNode,
   existingVariables: Map<string, Variable>,
-  variableCache: Map<string, any>,
+  variableCache: Map<string, VariableCacheEntry>,
   collectionId: string,
   stats: ProcessingStats
 ): Promise<void> {
-  // Validate the text layer is still processable
   if (!validateTextLayer(textLayer)) {
     stats.skipped++;
     return;
@@ -233,32 +590,25 @@ async function processTextLayer(
     return;
   }
 
-  // Check cache first
   let variable = getFromVariableCache(variableCache, variableName, textContent);
   
   if (variable) {
-    // Use cached variable
     bindTextNodeToVariable(textLayer, variable);
     stats.connected++;
   } else {
-    // Check existing variables
     variable = findExistingVariable(existingVariables, variableName, textContent);
     
     if (variable) {
-      // Connect to existing variable
       bindTextNodeToVariable(textLayer, variable);
       stats.connected++;
     } else {
-      // Create new variable
       variable = await createStringVariable(collectionId, variableName, textContent);
       
-      // Add to cache for future use
       const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
       if (collection) {
         addToVariableCache(variableCache, variable, collection);
       }
       
-      // Connect text layer to new variable
       bindTextNodeToVariable(textLayer, variable);
       stats.created++;
     }
@@ -300,7 +650,6 @@ function handlePluginError(error: unknown): void {
     message
   });
   
-  // Also show as notification for better UX
   figma.notify(`Error: ${message}`, { error: true });
 }
 
