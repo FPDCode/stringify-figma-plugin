@@ -825,7 +825,7 @@
           textLayers = msg.layers;
           scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
           
-          updateTextCounter(msg.validCount);
+          updateTextCounter(msg.validCount, 'Text layers ready');
           updateDynamicButton(); // Update button based on scan results
           
           if (msg.validCount === 0) {
