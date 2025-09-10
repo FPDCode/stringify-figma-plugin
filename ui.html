@@ -568,6 +568,9 @@
           elements.cancelButton.classList.remove('hidden');
           elements.progressContainer.classList.add('visible');
           elements.textCounterLabel.textContent = 'Processing...';
+          // Hide both process and create buttons during processing
+          elements.processButton.classList.add('hidden');
+          elements.createButton.classList.add('hidden');
           isProcessing = true;
           break;
           
@@ -593,6 +596,11 @@
     }
     
     function updateDynamicButton() {
+      // Don't update buttons during processing
+      if (currentState === 'processing') {
+        return;
+      }
+      
       if (selectedCollection && scanResults && scanResults.validCount > 0) {
         // Collection selected and text layers found - show process button
         elements.processButton.textContent = `Process ${scanResults.validCount} Text Layers`;
