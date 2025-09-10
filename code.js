@@ -1,262 +1,248 @@
-"use strict";
 // Stringify Plugin - Convert text layers to variables
-// This plugin scans text layers and creates corresponding variables
+// Enhanced V2 implementation with modular architecture
+import { PluginError } from './lib/types';
+import { PLUGIN_CONFIG, UI_MESSAGES } from './lib/constants';
+import { getValidTextLayers, validateTextLayer, preprocessTextForVariable } from './lib/textProcessor';
+import { getVariableCollections, createDefaultCollection, getExistingVariables, createStringVariable, bindTextNodeToVariable, findExistingVariable, createVariableCache, addToVariableCache, getFromVariableCache } from './lib/variableManager';
+// Plugin state management
+let isProcessing = false;
+let currentOperation = null;
 // Show the UI
-figma.showUI(__html__, { width: 380, height: 560 });
-// Enhanced text validation - only process text that starts with alphanumeric
-function isValidTextForVariable(text) {
-    const trimmed = text.trim();
-    if (!trimmed)
-        return false;
-    // Check if first non-space character is alphanumeric
-    const firstChar = trimmed[0];
-    return /[A-Za-z0-9]/.test(firstChar);
-}
-// Enhanced variable naming with underscore-based system
-function createVariableName(text) {
-    let processed = text.trim();
-    // Special character mappings
-    processed = processed
-        .replace(/@/g, '_A_') // @ → _A_ (for emails/handles)
-        .replace(/\s+/g, '_') // spaces → underscores
-        .replace(/[^A-Za-z0-9_]/g, '_'); // all other special chars → underscores
-    // Remove multiple consecutive underscores
-    processed = processed.replace(/_+/g, '_');
-    // Remove leading/trailing underscores
-    processed = processed.replace(/^_+|_+$/g, '');
-    // Smart truncation for long names (50 char limit with 60/40 split)
-    if (processed.length > 50) {
-        const startLength = Math.floor(50 * 0.6); // 30 chars
-        const endLength = Math.floor(50 * 0.4); // 20 chars
-        const start = processed.substring(0, startLength);
-        const end = processed.substring(processed.length - endLength);
-        processed = `${start}___${end}`;
-    }
-    return processed;
-}
-// Utility function to check if two strings are similar
-function isSimilarString(str1, str2) {
-    const normalize = (str) => str.toLowerCase().replace(/\s+/g, '');
-    return normalize(str1) === normalize(str2);
-}
-// Get all valid text layers from the current page
-function getValidTextLayers() {
-    const allTextLayers = [];
-    const validTextLayers = [];
-    function traverse(node) {
-        var _a;
-        if (node.type === 'TEXT') {
-            const textNode = node;
-            allTextLayers.push(textNode);
-            // Check if text is valid for variable creation
-            if (isValidTextForVariable(textNode.characters)) {
-                // Skip if already bound to a variable
-                const boundVariable = (_a = textNode.boundVariables) === null || _a === void 0 ? void 0 : _a.characters;
-                if (!boundVariable) {
-                    validTextLayers.push(textNode);
-                }
-            }
-        }
-        if ('children' in node) {
-            for (const child of node.children) {
-                traverse(child);
-            }
-        }
-    }
-    traverse(figma.currentPage);
-    return {
-        layers: validTextLayers,
-        validCount: validTextLayers.length,
-        totalCount: allTextLayers.length
-    };
-}
-// Get variable collections
-async function getVariableCollections() {
-    try {
-        const collections = await figma.variables.getLocalVariableCollectionsAsync();
-        return collections.map(collection => ({
-            id: collection.id,
-            name: collection.name,
-            variables: collection.variableIds
-        }));
-    }
-    catch (error) {
-        console.error('Error getting variable collections:', error);
-        return [];
-    }
-}
-// Create a default collection for text variables
-async function createDefaultCollection() {
-    try {
-        let collectionName = "Text to String";
-        let counter = 1;
-        // Check for name conflicts and add number if needed
-        const existingCollections = await figma.variables.getLocalVariableCollectionsAsync();
-        const existingNames = existingCollections.map(c => c.name);
-        while (existingNames.includes(collectionName)) {
-            collectionName = `Text to String ${counter}`;
-            counter++;
-        }
-        const collection = figma.variables.createVariableCollection(collectionName);
-        return collection.id;
-    }
-    catch (error) {
-        console.error('Error creating default collection:', error);
-        return null;
-    }
-}
-// Create variables for text layers with enhanced processing and progress updates
-async function createVariablesForTextLayers(textLayers, collectionId) {
-    try {
-        const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
-        if (!collection) {
-            throw new Error('Collection not found');
-        }
-        let created = 0;
-        let connected = 0;
-        let skipped = 0;
-        let errors = 0;
-        // Pre-load all existing variables for faster duplicate detection
-        const existingVariables = new Map();
-        for (const id of collection.variableIds) {
-            try {
-                const variable = await figma.variables.getVariableByIdAsync(id);
-                if (variable) {
-                    existingVariables.set(variable.name, variable);
-                }
-            }
-            catch (error) {
-                console.warn(`Could not load variable ${id}:`, error);
-            }
-        }
-        // Process in batches for better performance and progress updates
-        const BATCH_SIZE = 10; // Process 10 text layers at a time
-        const totalLayers = textLayers.length;
-        for (let i = 0; i < totalLayers; i += BATCH_SIZE) {
-            const batch = textLayers.slice(i, i + BATCH_SIZE);
-            // Process batch
-            for (const textLayer of batch) {
-                try {
-                    const textContent = textLayer.characters.trim();
-                    if (!textContent) {
-                        skipped++;
-                        continue;
-                    }
-                    const variableName = createVariableName(textContent);
-                    // Check if variable already exists by name and content
-                    let existingVariable = null;
-                    for (const [name, variable] of existingVariables) {
-                        if (name === variableName &&
-                            variable.valuesByMode[collection.defaultModeId] === textContent) {
-                            existingVariable = variable;
-                            break;
-                        }
-                    }
-                    if (existingVariable) {
-                        // Connect to existing variable
-                        textLayer.setBoundVariable('characters', existingVariable);
-                        connected++;
-                    }
-                    else {
-                        // Create new variable
-                        const newVariable = figma.variables.createVariable(variableName, collection, 'STRING');
-                        newVariable.setValueForMode(collection.defaultModeId, textContent);
-                        // Add to our cache for future checks
-                        existingVariables.set(variableName, newVariable);
-                        // Connect text layer to new variable
-                        textLayer.setBoundVariable('characters', newVariable);
-                        created++;
-                    }
-                }
-                catch (error) {
-                    console.error(`Error processing text layer "${textLayer.name}":`, error);
-                    errors++;
-                }
-            }
-            // Send progress update
-            const processed = Math.min(i + BATCH_SIZE, totalLayers);
-            const progress = Math.round((processed / totalLayers) * 100);
-            const remaining = totalLayers - processed;
-            figma.ui.postMessage({
-                type: 'progress-update',
-                progress: progress,
-                remaining: remaining
-            });
-            // Small delay to prevent UI freezing
-            await new Promise(resolve => setTimeout(resolve, 10));
-        }
-        return { created, connected, skipped, errors };
-    }
-    catch (error) {
-        console.error('Error creating variables:', error);
-        throw error;
-    }
-}
-// Handle messages from UI
+figma.showUI(__html__, PLUGIN_CONFIG.UI_DIMENSIONS);
+// Enhanced message handling with comprehensive error handling
 figma.ui.onmessage = async (msg) => {
     try {
-        if (msg.type === 'get-collections') {
-            const collections = await getVariableCollections();
-            figma.ui.postMessage({
-                type: 'collections-loaded',
-                collections: collections
-            });
-        }
-        if (msg.type === 'scan-text-layers') {
-            const result = getValidTextLayers();
-            figma.ui.postMessage({
-                type: 'text-layers-found',
-                layers: result.layers.map(layer => ({
-                    id: layer.id,
-                    name: layer.name,
-                    characters: layer.characters
-                })),
-                validCount: result.validCount,
-                totalCount: result.totalCount
-            });
-        }
-        if (msg.type === 'create-variables' && msg.collectionId) {
-            const result = getValidTextLayers();
-            if (result.validCount === 0) {
-                figma.ui.postMessage({
-                    type: 'error',
-                    message: `No valid text layers found. Found ${result.totalCount} text layers total, but none are suitable for variable creation.`
-                });
-                return;
-            }
-            const processResult = await createVariablesForTextLayers(result.layers, msg.collectionId);
-            figma.ui.postMessage({
-                type: 'variables-created',
-                created: processResult.created,
-                connected: processResult.connected,
-                skipped: processResult.skipped,
-                errors: processResult.errors,
-                totalProcessed: result.validCount
-            });
-        }
-        if (msg.type === 'create-default-collection') {
-            const collectionId = await createDefaultCollection();
-            if (collectionId) {
-                // Refresh collections and return the new one
-                const collections = await getVariableCollections();
-                figma.ui.postMessage({
-                    type: 'collection-created',
-                    collectionId: collectionId,
-                    collections: collections
-                });
-            }
-            else {
-                figma.ui.postMessage({
-                    type: 'error',
-                    message: 'Failed to create default collection'
-                });
-            }
+        currentOperation = msg.type;
+        await handleMessage(msg);
+    }
+    catch (error) {
+        console.error(`Error handling message ${msg.type}:`, error);
+        handlePluginError(error);
+    }
+    finally {
+        currentOperation = null;
+    }
+};
+async function handleMessage(msg) {
+    switch (msg.type) {
+        case 'get-collections':
+            await handleGetCollections();
+            break;
+        case 'scan-text-layers':
+            await handleScanTextLayers();
+            break;
+        case 'create-variables':
+            await handleCreateVariables(msg.collectionId);
+            break;
+        case 'create-default-collection':
+            await handleCreateDefaultCollection();
+            break;
+        default:
+            throw new Error(`Unknown message type: ${msg.type}`);
+    }
+}
+async function handleGetCollections() {
+    try {
+        const collections = await getVariableCollections();
+        sendMessage({
+            type: 'collections-loaded',
+            collections
+        });
+    }
+    catch (error) {
+        throw new PluginError(`Failed to load collections: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleScanTextLayers() {
+    try {
+        const result = getValidTextLayers();
+        sendMessage({
+            type: 'text-layers-found',
+            layers: result.layers.map(layer => ({
+                id: layer.id,
+                name: layer.name,
+                characters: layer.characters
+            })),
+            validCount: result.validCount,
+            totalCount: result.totalCount
+        });
+        if (result.validCount === 0) {
+            const message = result.totalCount > 0
+                ? `Found ${result.totalCount} text layers, but none are suitable for variable creation.`
+                : 'No text layers found on the current page.';
+            figma.notify(message, { timeout: 3000 });
         }
     }
     catch (error) {
-        figma.ui.postMessage({
-            type: 'error',
-            message: error instanceof Error ? error.message : 'An error occurred'
-        });
+        throw new PluginError(`Failed to scan text layers: ${error instanceof Error ? error.message : String(error)}`);
     }
-};
+}
+async function handleCreateVariables(collectionId) {
+    if (!collectionId) {
+        throw new PluginError('Collection ID is required');
+    }
+    if (isProcessing) {
+        throw new PluginError('Processing is already in progress');
+    }
+    isProcessing = true;
+    try {
+        const { layers: textLayers } = getValidTextLayers();
+        if (textLayers.length === 0) {
+            throw new PluginError('No valid text layers found for processing');
+        }
+        const result = await processTextLayersWithProgress(textLayers, collectionId);
+        sendMessage({
+            type: 'variables-created',
+            result
+        });
+        // Show completion notification
+        const summary = createProcessingSummary(result);
+        figma.notify(summary, { timeout: 5000 });
+    }
+    finally {
+        isProcessing = false;
+    }
+}
+async function handleCreateDefaultCollection() {
+    try {
+        const collectionId = await createDefaultCollection();
+        const collections = await getVariableCollections();
+        sendMessage({
+            type: 'collection-created',
+            collectionId,
+            collections
+        });
+        figma.notify(UI_MESSAGES.COLLECTION_CREATED, { timeout: 3000 });
+    }
+    catch (error) {
+        throw new PluginError(`Failed to create collection: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function processTextLayersWithProgress(textLayers, collectionId) {
+    const stats = {
+        created: 0,
+        connected: 0,
+        skipped: 0,
+        errors: 0
+    };
+    const existingVariables = await getExistingVariables(collectionId);
+    const variableCache = createVariableCache(collectionId);
+    const totalLayers = textLayers.length;
+    const errors = [];
+    for (let i = 0; i < totalLayers; i += PLUGIN_CONFIG.BATCH_SIZE) {
+        const batch = textLayers.slice(i, i + PLUGIN_CONFIG.BATCH_SIZE);
+        for (const textLayer of batch) {
+            try {
+                await processTextLayer(textLayer, existingVariables, variableCache, collectionId, stats);
+            }
+            catch (error) {
+                console.error(`Error processing text layer "${textLayer.name}":`, error);
+                stats.errors++;
+                errors.push({
+                    layer: textLayer.name,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
+        }
+        // Send progress update
+        const processed = Math.min(i + PLUGIN_CONFIG.BATCH_SIZE, totalLayers);
+        const progress = Math.round((processed / totalLayers) * 100);
+        const remaining = totalLayers - processed;
+        sendMessage({
+            type: 'progress-update',
+            progress,
+            remaining
+        });
+        // Small delay to prevent UI freezing
+        await new Promise(resolve => setTimeout(resolve, PLUGIN_CONFIG.PROGRESS_UPDATE_DELAY));
+    }
+    // Log errors for debugging
+    if (errors.length > 0) {
+        console.warn('Processing errors:', errors);
+    }
+    return Object.assign(Object.assign({}, stats), { totalProcessed: stats.created + stats.connected });
+}
+async function processTextLayer(textLayer, existingVariables, variableCache, collectionId, stats) {
+    // Validate the text layer is still processable
+    if (!validateTextLayer(textLayer)) {
+        stats.skipped++;
+        return;
+    }
+    const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters);
+    if (!textContent) {
+        stats.skipped++;
+        return;
+    }
+    // Check cache first
+    let variable = getFromVariableCache(variableCache, variableName, textContent);
+    if (variable) {
+        // Use cached variable
+        bindTextNodeToVariable(textLayer, variable);
+        stats.connected++;
+    }
+    else {
+        // Check existing variables
+        variable = findExistingVariable(existingVariables, variableName, textContent);
+        if (variable) {
+            // Connect to existing variable
+            bindTextNodeToVariable(textLayer, variable);
+            stats.connected++;
+        }
+        else {
+            // Create new variable
+            variable = await createStringVariable(collectionId, variableName, textContent);
+            // Add to cache for future use
+            const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+            if (collection) {
+                addToVariableCache(variableCache, variable, collection);
+            }
+            // Connect text layer to new variable
+            bindTextNodeToVariable(textLayer, variable);
+            stats.created++;
+        }
+    }
+}
+function createProcessingSummary(result) {
+    const parts = [];
+    if (result.created > 0) {
+        parts.push(`Created ${result.created} new variables`);
+    }
+    if (result.connected > 0) {
+        parts.push(`connected ${result.connected} to existing variables`);
+    }
+    if (result.skipped > 0) {
+        parts.push(`skipped ${result.skipped} layers`);
+    }
+    if (result.errors > 0) {
+        parts.push(`${result.errors} errors occurred`);
+    }
+    const summary = parts.length > 0 ? parts.join(', ') : 'No changes made';
+    return `Processing complete: ${summary}`;
+}
+function handlePluginError(error) {
+    const message = error instanceof PluginError
+        ? error.message
+        : error instanceof Error
+            ? error.message
+            : 'An unexpected error occurred';
+    sendMessage({
+        type: 'error',
+        message
+    });
+    // Also show as notification for better UX
+    figma.notify(`Error: ${message}`, { error: true });
+}
+function sendMessage(message) {
+    figma.ui.postMessage(message);
+}
+// Handle plugin cleanup
+figma.on('close', () => {
+    isProcessing = false;
+    currentOperation = null;
+});
+// Handle selection changes during processing
+figma.on('selectionchange', () => {
+    if (isProcessing && currentOperation === 'create-variables') {
+        console.warn('Selection changed during processing - results may be inconsistent');
+    }
+});
