@@ -56,7 +56,7 @@ class PluginError extends Error {
 
 type MessageFromUI = 
   | { type: 'get-collections' }
-  | { type: 'scan-text-layers'; selectedCollectionId?: string }
+  | { type: 'scan-text-layers'; selectedCollectionId?: string; includeVariants?: boolean }
   | { type: 'create-variables'; collectionId: string; options?: Record<string, unknown> }
   | { type: 'create-default-collection' };
 
@@ -183,13 +183,38 @@ function validateTextLayer(node: TextNode): boolean {
   }
 }
 
-function getValidTextLayers(): { 
+function getValidTextLayers(includeVariants: boolean = true): { 
   layers: TextNode[], 
   validCount: number, 
   totalCount: number 
 } {
   try {
-    const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
+    let allTextNodes: TextNode[];
+    
+    if (includeVariants) {
+      // Original behavior: get ALL text nodes including variants
+      allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
+    } else {
+      // New behavior: only get visible text nodes (exclude variant instances)
+      allTextNodes = figma.currentPage.findAll(node => {
+        if (node.type !== "TEXT") return false;
+        
+        // Check if this text node is in a component instance
+        let parent = node.parent;
+        while (parent) {
+          if (parent.type === "INSTANCE") {
+            // This text node is inside a component instance
+            // Only include it if the instance is visible (not a hidden variant)
+            return parent.visible;
+          }
+          parent = parent.parent;
+        }
+        
+        // Text node is not in a component instance, include it
+        return true;
+      }) as TextNode[];
+    }
+    
     const validTextNodes = allTextNodes.filter(validateTextLayer);
     
     return {
@@ -421,7 +446,7 @@ async function handleMessage(msg: MessageFromUI): Promise<void> {
       await handleGetCollections();
       break;
     case 'scan-text-layers':
-      await handleScanTextLayers(msg.selectedCollectionId);
+      await handleScanTextLayers(msg.selectedCollectionId, msg.includeVariants);
       break;
     case 'create-variables':
       await handleCreateVariables(msg.collectionId, msg.options);
@@ -446,7 +471,7 @@ async function handleGetCollections(): Promise<void> {
   }
 }
 
-async function handleScanTextLayers(selectedCollectionId?: string): Promise<void> {
+async function handleScanTextLayers(selectedCollectionId?: string, includeVariants: boolean = true): Promise<void> {
   try {
     // First, get current collections to validate the selected one
     const collections = await getVariableCollections();
@@ -463,7 +488,7 @@ async function handleScanTextLayers(selectedCollectionId?: string): Promise<void
       }
     }
     
-    const result = getValidTextLayers();
+    const result = getValidTextLayers(includeVariants);
     
     sendMessage({
       type: 'text-layers-found',
@@ -502,7 +527,7 @@ async function handleCreateVariables(collectionId: string, options?: Record<stri
   isProcessing = true;
   
   try {
-    const { layers: textLayers } = getValidTextLayers();
+    const { layers: textLayers } = getValidTextLayers(true); // Always include variants for processing
     
     if (textLayers.length === 0) {
       throw new PluginError('No valid text layers found for processing');

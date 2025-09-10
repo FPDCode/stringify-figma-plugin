@@ -105,9 +105,32 @@ function validateTextLayer(node) {
         return false;
     }
 }
-function getValidTextLayers() {
+function getValidTextLayers(includeVariants = true) {
     try {
-        const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT");
+        let allTextNodes;
+        if (includeVariants) {
+            // Original behavior: get ALL text nodes including variants
+            allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT");
+        }
+        else {
+            // New behavior: only get visible text nodes (exclude variant instances)
+            allTextNodes = figma.currentPage.findAll(node => {
+                if (node.type !== "TEXT")
+                    return false;
+                // Check if this text node is in a component instance
+                let parent = node.parent;
+                while (parent) {
+                    if (parent.type === "INSTANCE") {
+                        // This text node is inside a component instance
+                        // Only include it if the instance is visible (not a hidden variant)
+                        return parent.visible;
+                    }
+                    parent = parent.parent;
+                }
+                // Text node is not in a component instance, include it
+                return true;
+            });
+        }
         const validTextNodes = allTextNodes.filter(validateTextLayer);
         return {
             layers: validTextNodes,
@@ -294,7 +317,7 @@ async function handleMessage(msg) {
             await handleGetCollections();
             break;
         case 'scan-text-layers':
-            await handleScanTextLayers(msg.selectedCollectionId);
+            await handleScanTextLayers(msg.selectedCollectionId, msg.includeVariants);
             break;
         case 'create-variables':
             await handleCreateVariables(msg.collectionId, msg.options);
@@ -318,7 +341,7 @@ async function handleGetCollections() {
         throw new PluginError(`Failed to load collections: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-async function handleScanTextLayers(selectedCollectionId) {
+async function handleScanTextLayers(selectedCollectionId, includeVariants = true) {
     try {
         // First, get current collections to validate the selected one
         const collections = await getVariableCollections();
@@ -333,7 +356,7 @@ async function handleScanTextLayers(selectedCollectionId) {
                 return;
             }
         }
-        const result = getValidTextLayers();
+        const result = getValidTextLayers(includeVariants);
         sendMessage({
             type: 'text-layers-found',
             layers: result.layers.map((layer) => ({
@@ -366,7 +389,7 @@ async function handleCreateVariables(collectionId, options) {
     }
     isProcessing = true;
     try {
-        const { layers: textLayers } = getValidTextLayers();
+        const { layers: textLayers } = getValidTextLayers(true); // Always include variants for processing
         if (textLayers.length === 0) {
             throw new PluginError('No valid text layers found for processing');
         }

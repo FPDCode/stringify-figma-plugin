@@ -233,6 +233,74 @@
     }
 
     /* ============================================================================
+       VARIANT OPTIONS
+    ============================================================================ */
+    
+    .variant-options-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .variant-label {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1.21;
+      color: #000000;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    
+    .variant-toggle-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+    }
+    
+    .variant-toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: #374151;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .variant-toggle {
+      width: 16px;
+      height: 16px;
+      margin: 0;
+      cursor: pointer;
+      accent-color: #007AFF;
+    }
+    
+    .variant-toggle-text {
+      font-weight: 500;
+      user-select: none;
+    }
+    
+    .variant-description {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 12px;
+      color: #6b7280;
+      line-height: 1.4;
+      margin: 0;
+      padding: 0;
+      font-style: italic;
+    }
+
+    /* ============================================================================
        TEXT COUNTER
     ============================================================================ */
     
@@ -424,6 +492,26 @@
       </div>
     </section>
 
+    <!-- Variant Scanning Options -->
+    <section class="variant-options-container" aria-labelledby="variant-heading">
+      <h3 id="variant-heading" class="variant-label">Scan Options</h3>
+      <div class="variant-toggle-container">
+        <label class="variant-toggle-label">
+          <input 
+            type="checkbox" 
+            class="variant-toggle" 
+            id="includeVariantsToggle"
+            checked
+            aria-describedby="variant-description"
+          >
+          <span class="variant-toggle-text">Include Component Variants</span>
+        </label>
+        <div id="variant-description" class="variant-description">
+          When enabled, scans all text in component variants. When disabled, only scans visible text layers.
+        </div>
+      </div>
+    </section>
+
     <!-- Text Counter Section -->
     <section class="text-counter-container" id="textCounterContainer" aria-live="polite">
       <div class="text-counter-number" id="textCounterNumber">0</div>
@@ -501,6 +589,7 @@
     // UI Elements
     const elements = {
       collectionSelect: document.getElementById('collectionSelect'),
+      includeVariantsToggle: document.getElementById('includeVariantsToggle'),
       textCounterNumber: document.getElementById('textCounterNumber'),
       textCounterLabel: document.getElementById('textCounterLabel'),
       textCounterContainer: document.getElementById('textCounterContainer'),
@@ -746,7 +835,8 @@
       hideStatus();
       sendMessage({ 
         type: 'scan-text-layers',
-        selectedCollectionId: selectedCollection
+        selectedCollectionId: selectedCollection,
+        includeVariants: elements.includeVariantsToggle.checked
       });
     });
     
@@ -780,6 +870,17 @@
       setButtonLoading(elements.createButton, true);
       hideStatus();
       sendMessage({ type: 'create-default-collection' });
+    });
+    
+    // Handle variant toggle changes
+    elements.includeVariantsToggle.addEventListener('change', () => {
+      // Auto-rescan when toggle changes
+      hideStatus();
+      sendMessage({ 
+        type: 'scan-text-layers',
+        selectedCollectionId: selectedCollection,
+        includeVariants: elements.includeVariantsToggle.checked
+      });
     });
     
     // ============================================================================
@@ -872,7 +973,8 @@
           setTimeout(() => {
             sendMessage({ 
               type: 'scan-text-layers',
-              selectedCollectionId: selectedCollection
+              selectedCollectionId: selectedCollection,
+              includeVariants: elements.includeVariantsToggle.checked
             });
           }, 1000); // Wait 1 second to let the success message show
           break;
@@ -909,7 +1011,8 @@
         sendMessage({ type: 'get-collections' });
         sendMessage({ 
           type: 'scan-text-layers',
-          selectedCollectionId: selectedCollection
+          selectedCollectionId: selectedCollection,
+          includeVariants: elements.includeVariantsToggle.checked
         });
         setState('startup');
       } catch (error) {
@@ -927,7 +1030,8 @@
         sendMessage({ type: 'get-collections' });
         sendMessage({ 
           type: 'scan-text-layers',
-          selectedCollectionId: selectedCollection
+          selectedCollectionId: selectedCollection,
+          includeVariants: elements.includeVariantsToggle.checked
         });
       }
     });
