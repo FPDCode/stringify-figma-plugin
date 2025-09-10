@@ -1,7 +1,14 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Convert Figma text layers to string variables">
+  <title>Stringify - Text to Variables</title>
   <style>
+    /* ============================================================================
+       RESET AND BASE STYLES
+    ============================================================================ */
     * {
       box-sizing: border-box;
     }
@@ -15,6 +22,33 @@
       height: 100%;
       overflow: hidden;
     }
+
+    /* ============================================================================
+       ACCESSIBILITY STYLES
+    ============================================================================ */
+    
+    /* Screen reader only class for accessibility */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    
+    /* Focus management */
+    *:focus {
+      outline: 2px solid #007AFF;
+      outline-offset: 2px;
+    }
+    
+    /* ============================================================================
+       LAYOUT CONTAINERS
+    ============================================================================ */
     
     .plugin-container {
       display: flex;
@@ -31,51 +65,9 @@
       flex-direction: column;
       gap: 8px;
       flex-shrink: 0;
-      width: calc(100% - 0px);
+      width: 100%;
       margin: 0;
       padding: 0;
-    }
-    
-    .collection-label {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-weight: 600;
-      font-size: 13px;
-      line-height: 1.21;
-      color: #000000;
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    
-    .collection-select {
-      width: 100%;
-      height: 44px;
-      padding: 10px 12px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      background: #ffffff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 14px;
-      color: #374151;
-      cursor: pointer;
-      outline: none;
-      transition: border-color 0.2s ease;
-      box-sizing: border-box;
-    }
-    
-    .collection-select:hover {
-      border-color: #007AFF;
-    }
-    
-    .collection-select:focus {
-      border-color: #007AFF;
-      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
-    }
-    
-    .collection-select option {
-      padding: 8px;
-      font-size: 14px;
     }
     
     .text-counter-container {
@@ -93,6 +85,156 @@
       margin: 0;
       min-width: 0;
     }
+    
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    /* ============================================================================
+       PROGRESS INDICATORS
+    ============================================================================ */
+    
+    .progress-container {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    .progress-container.visible {
+      display: flex;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: #f3f4f6;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #007AFF 0%, #0056CC 100%);
+      border-radius: 4px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    
+    .progress-text {
+      font-size: 12px;
+      color: #6b7280;
+      text-align: center;
+      margin: 0;
+    }
+
+    /* ============================================================================
+       STATUS MESSAGES
+    ============================================================================ */
+    
+    .status-message {
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      text-align: left;
+      display: none;
+      margin-top: 8px;
+      flex-shrink: 0;
+      width: 100%;
+      border: 1px solid transparent;
+      box-sizing: border-box;
+    }
+    
+    .status-message.visible {
+      display: block;
+    }
+    
+    .status-message.error {
+      background: #ffeaea;
+      color: #d32f2f;
+      border-color: #ffcdd2;
+    }
+    
+    .status-message.success {
+      background: #e8f5e8;
+      color: #2d5a2d;
+      border-color: #c3e6c3;
+    }
+    
+    .status-message.warning {
+      background: #fff8e1;
+      color: #f57f17;
+      border-color: #ffecb3;
+    }
+    
+    .status-message.info {
+      background: #e3f2fd;
+      color: #1976d2;
+      border-color: #bbdefb;
+    }
+
+    /* ============================================================================
+       FORM ELEMENTS
+    ============================================================================ */
+    
+    .collection-label {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1.21;
+      color: #000000;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    
+    .collection-select {
+      width: 100%;
+      height: 44px;
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: #374151;
+      cursor: pointer;
+      outline: none;
+      transition: border-color 0.2s ease;
+      box-sizing: border-box;
+    }
+    
+    .collection-select:hover {
+      border-color: #9ca3af;
+    }
+    
+    .collection-select:focus {
+      border-color: #007AFF;
+      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+    }
+    
+    .collection-select:disabled {
+      background: #f9fafb;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    /* ============================================================================
+       TEXT COUNTER
+    ============================================================================ */
     
     .text-counter-number {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -113,17 +255,10 @@
       text-align: center;
       margin: 0;
     }
-    
-    .button-container {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      flex-shrink: 0;
-      width: 100%;
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+
+    /* ============================================================================
+       BUTTONS
+    ============================================================================ */
     
     .button {
       display: inline-flex;
@@ -144,11 +279,13 @@
       transition: all 0.15s ease;
       outline: none;
       box-sizing: border-box;
+      position: relative;
     }
     
     .button:disabled {
-      opacity: 0.5;
+      opacity: 0.6;
       cursor: not-allowed;
+      pointer-events: none;
     }
     
     .button-scan {
@@ -210,110 +347,156 @@
     .button-create:focus {
       box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
     }
+
+    /* ============================================================================
+       LOADING STATES
+    ============================================================================ */
     
-    .progress-container {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      gap: 8px;
+    .button.loading {
       position: relative;
-      height: 61px;
+      color: transparent;
     }
     
-    .progress-bar {
-      width: 100px;
-      height: 6px;
-      background: rgba(120, 120, 128, 0.12);
-      border-radius: 500px;
-      position: relative;
-      overflow: hidden;
+    .button.loading::after {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      border: 2px solid transparent;
+      border-top-color: currentColor;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
     }
     
-    .progress-fill {
-      height: 100%;
-      background: #00C7BE;
-      border-radius: 500px;
-      transition: width 0.3s ease;
+    .button-scan.loading::after {
+      border-top-color: #374151;
     }
     
-    .status-message {
-      padding: 6px 0;
-      border-radius: 4px;
-      font-size: 11px;
-      text-align: center;
-      display: none;
-      margin-top: 6px;
-      flex-shrink: 0;
-      width: 100%;
+    .button-process.loading::after {
+      border-top-color: #ffffff;
     }
     
-    .status-message.success {
-      background: #e8f5e8;
-      color: #2d5a2d;
-      border: 1px solid #c3e6c3;
+    .button-cancel.loading::after {
+      border-top-color: #ffffff;
     }
     
-    .status-message.error {
-      background: #ffeaea;
-      color: #d32f2f;
-      border: 1px solid #ffcdd2;
+    .button-create.loading::after {
+      border-top-color: #ffffff;
     }
     
-    .status-message.info {
-      background: #e3f2fd;
-      color: #1976d2;
-      border: 1px solid #bbdefb;
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
+
+    /* ============================================================================
+       UTILITY CLASSES
+    ============================================================================ */
     
     .hidden {
       display: none !important;
     }
+    
+    .visible {
+      display: block !important;
+    }
+    
+    .flex-visible {
+      display: flex !important;
+    }
   </style>
 </head>
 <body>
-  <div class="plugin-container">
-                <!-- Collection Selection -->
-                <div class="collection-container">
-                  <h3 class="collection-label">Variable Collection</h3>
-                  <select class="collection-select" id="collectionSelect">
-                    <option value="" disabled selected>Select a collection.....</option>
-                  </select>
-                </div>
-    
-    <!-- Text Counter -->
-    <div class="text-counter-container" id="textCounterContainer">
+  <main class="plugin-container" role="main">
+    <!-- Collection Selection Section -->
+    <section class="collection-container" aria-labelledby="collection-heading">
+      <h3 id="collection-heading" class="collection-label">Variable Collection</h3>
+      <select 
+        class="collection-select" 
+        id="collectionSelect"
+        aria-describedby="collection-description"
+        aria-label="Select variable collection"
+      >
+        <option value="" disabled selected>Select a collection...</option>
+      </select>
+      <div id="collection-description" class="sr-only">
+        Choose the variable collection where new string variables will be created
+      </div>
+    </section>
+
+    <!-- Text Counter Section -->
+    <section class="text-counter-container" id="textCounterContainer" aria-live="polite">
       <div class="text-counter-number" id="textCounterNumber">0</div>
       <div class="text-counter-label" id="textCounterLabel">Text layers scanned</div>
-    </div>
-    
-    <!-- Progress Container (hidden by default) -->
-    <div class="progress-container hidden" id="progressContainer">
-      <div class="progress-bar">
+    </section>
+
+    <!-- Progress Container -->
+    <div class="progress-container" id="progressContainer" aria-live="polite">
+      <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
         <div class="progress-fill" id="progressFill" style="width: 0%"></div>
       </div>
+      <div class="progress-text" id="progressText">Processing...</div>
     </div>
-    
-    <!-- Status Message -->
-    <div class="status-message" id="statusMessage"></div>
 
-    <!-- Button Container -->
-    <div class="button-container">
-      <button class="button button-scan" id="scanButton">🔍 Rescan Text Layers</button>
-      <button class="button button-process hidden" id="processButton">Process Text Layers</button>
-      <button class="button button-cancel hidden" id="cancelButton">Stop Processing</button>
-      <button class="button button-create hidden" id="createButton">Create New Collection</button>
-    </div>
-  </div>
-  
+    <!-- Status Messages -->
+    <div class="status-message" id="statusMessage" role="alert" aria-live="assertive"></div>
+
+    <!-- Action Buttons -->
+    <section class="button-container">
+      <button 
+        class="button button-scan" 
+        id="scanButton"
+        aria-describedby="scan-description"
+        aria-label="Scan text layers"
+      >
+        🔍 Rescan Text Layers
+      </button>
+      <div id="scan-description" class="sr-only">
+        Scan the current page for text layers that can be converted to variables
+      </div>
+      
+      <button 
+        class="button button-process hidden" 
+        id="processButton"
+        aria-describedby="process-description"
+        aria-label="Process text layers"
+      >
+        Process Text Layers
+      </button>
+      <div id="process-description" class="sr-only">
+        Convert found text layers to string variables in the selected collection
+      </div>
+      
+      <button class="button button-cancel hidden" id="cancelButton" aria-label="Stop processing">
+        Stop Processing
+      </button>
+      
+      <button 
+        class="button button-create hidden" 
+        id="createButton"
+        aria-describedby="create-description"
+        aria-label="Create new collection"
+      >
+        Create New Collection
+      </button>
+      <div id="create-description" class="sr-only">
+        Create a new variable collection for storing text variables
+      </div>
+    </section>
+  </main>
+
   <script>
-    // State management
-    let currentState = 'startup'; // startup, collection-selected, processing, completed
+    // ============================================================================
+    // ENHANCED STATE MANAGEMENT
+    // ============================================================================
+    
+    let currentState = 'startup';
     let textLayers = [];
     let selectedCollection = null;
     let scanResults = null;
     let collections = [];
     let isProcessing = false;
+    let processingTimeout = null;
     
     // UI Elements
     const elements = {
@@ -323,6 +506,7 @@
       textCounterContainer: document.getElementById('textCounterContainer'),
       progressContainer: document.getElementById('progressContainer'),
       progressFill: document.getElementById('progressFill'),
+      progressText: document.getElementById('progressText'),
       scanButton: document.getElementById('scanButton'),
       processButton: document.getElementById('processButton'),
       cancelButton: document.getElementById('cancelButton'),
@@ -330,19 +514,39 @@
       statusMessage: document.getElementById('statusMessage')
     };
     
-    // State management functions
+    // ============================================================================
+    // STATE MANAGEMENT FUNCTIONS
+    // ============================================================================
+    
     function setState(newState) {
+      if (currentState === newState) return;
+      
+      console.log(`State change: ${currentState} -> ${newState}`);
       currentState = newState;
       updateUI();
     }
     
     function updateUI() {
-      // Hide all buttons first
+      // Clear any existing timeouts
+      if (processingTimeout) {
+        clearTimeout(processingTimeout);
+        processingTimeout = null;
+      }
+      
+      // Reset button states
+      Object.values(elements).forEach(el => {
+        if (el && el.classList) {
+          el.classList.remove('loading');
+          el.disabled = false;
+        }
+      });
+      
+      // Hide all dynamic elements
       elements.scanButton.classList.add('hidden');
       elements.processButton.classList.add('hidden');
       elements.cancelButton.classList.add('hidden');
       elements.createButton.classList.add('hidden');
-      elements.progressContainer.classList.add('hidden');
+      elements.progressContainer.classList.remove('visible');
       
       // Show appropriate elements based on state
       switch (currentState) {
@@ -355,36 +559,68 @@
         case 'collection-selected':
           elements.scanButton.classList.remove('hidden');
           elements.processButton.classList.remove('hidden');
-          elements.textCounterLabel.textContent = 'Text layers scanned';
+          elements.textCounterLabel.textContent = 'Text layers ready';
           break;
           
         case 'processing':
           elements.cancelButton.classList.remove('hidden');
-          elements.progressContainer.classList.remove('hidden');
-          elements.textCounterLabel.textContent = 'Text layers to process';
+          elements.progressContainer.classList.add('visible');
+          elements.textCounterLabel.textContent = 'Processing...';
+          isProcessing = true;
           break;
           
         case 'completed':
           elements.scanButton.classList.remove('hidden');
           elements.processButton.classList.remove('hidden');
-          elements.textCounterLabel.textContent = 'Text layers scanned';
+          elements.textCounterLabel.textContent = 'Processing completed';
+          isProcessing = false;
           break;
+          
+        case 'error':
+          elements.scanButton.classList.remove('hidden');
+          elements.createButton.classList.remove('hidden');
+          elements.textCounterLabel.textContent = 'Ready to scan';
+          isProcessing = false;
+          break;
+      }
+      
+      // Update process button text and state
+      if (scanResults && selectedCollection) {
+        elements.processButton.textContent = `Process ${scanResults.validCount} Text Layers`;
+        elements.processButton.disabled = scanResults.validCount === 0;
+      } else {
+        elements.processButton.textContent = 'Select Collection First';
+        elements.processButton.disabled = true;
       }
     }
     
-    // Collection selection
+    // ============================================================================
+    // COLLECTION MANAGEMENT
+    // ============================================================================
+    
     function populateCollectionSelect() {
-      elements.collectionSelect.innerHTML = '<option value="" disabled selected>Select a collection.....</option>';
+      const select = elements.collectionSelect;
+      select.innerHTML = '<option value="" disabled selected>Select a collection...</option>';
+      
+      if (collections.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No collections found';
+        option.disabled = true;
+        select.appendChild(option);
+        return;
+      }
       
       collections.forEach(collection => {
         const option = document.createElement('option');
         option.value = collection.id;
-        option.textContent = collection.name;
-        elements.collectionSelect.appendChild(option);
+        const variableCount = collection.variables ? collection.variables.length : 0;
+        option.textContent = `${collection.name} (${variableCount} variables)`;
+        select.appendChild(option);
       });
     }
     
-    function selectCollection(collectionId, collectionName) {
+    function selectCollection(collectionId) {
       selectedCollection = collectionId;
       elements.collectionSelect.value = collectionId;
       
@@ -395,147 +631,233 @@
       }
     }
     
-    function updateTextCounter(count, label) {
+    // ============================================================================
+    // UI FEEDBACK FUNCTIONS
+    // ============================================================================
+    
+    function updateTextCounter(count, label = null) {
       elements.textCounterNumber.textContent = count;
-      elements.textCounterLabel.textContent = label;
+      if (label) {
+        elements.textCounterLabel.textContent = label;
+      }
     }
     
-    function updateProgress(percentage) {
+    function updateProgress(percentage, remaining = null) {
       elements.progressFill.style.width = percentage + '%';
+      elements.progressContainer.setAttribute('aria-valuenow', percentage);
+      
+      if (remaining !== null) {
+        updateTextCounter(remaining, `${remaining} remaining`);
+        elements.progressText.textContent = `Processing... ${remaining} items remaining`;
+      }
     }
     
-    function showStatus(message, type = 'info') {
-      elements.statusMessage.textContent = message;
-      elements.statusMessage.className = `status-message ${type}`;
-      elements.statusMessage.style.display = 'block';
+    function showStatus(message, type = 'info', duration = null) {
+      const statusEl = elements.statusMessage;
+      statusEl.textContent = message;
+      statusEl.className = `status-message ${type} visible`;
       
-      // Auto-hide after 3 seconds for success/info messages
-      if (type === 'success' || type === 'info') {
-        setTimeout(() => {
-          elements.statusMessage.style.display = 'none';
-        }, 3000);
+      // Set appropriate ARIA live region urgency
+      statusEl.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+      
+      if (duration && type !== 'error') {
+        setTimeout(() => hideStatus(), duration);
       }
     }
     
     function hideStatus() {
-      elements.statusMessage.style.display = 'none';
+      elements.statusMessage.classList.remove('visible');
     }
     
-    // Event listeners
+    function handleError(error, context = '') {
+      console.error(`Plugin error ${context}:`, error);
+      const userMessage = typeof error === 'string' ? error : 'An unexpected error occurred';
+      showStatus(userMessage, 'error');
+      setState('error');
+    }
+    
+    function setButtonLoading(button, loading) {
+      if (loading) {
+        button.classList.add('loading');
+        button.disabled = true;
+      } else {
+        button.classList.remove('loading');
+        button.disabled = false;
+      }
+    }
+    
+    // ============================================================================
+    // EVENT LISTENERS
+    // ============================================================================
+    
     elements.collectionSelect.addEventListener('change', (e) => {
       if (e.target.value) {
-        const selectedOption = e.target.options[e.target.selectedIndex];
-        selectCollection(e.target.value, selectedOption.textContent);
+        selectCollection(e.target.value);
+        hideStatus();
       }
     });
     
     elements.scanButton.addEventListener('click', () => {
+      setButtonLoading(elements.scanButton, true);
       hideStatus();
-      parent.postMessage({ pluginMessage: { type: 'scan-text-layers' } }, '*');
+      sendMessage({ type: 'scan-text-layers' });
     });
     
     elements.processButton.addEventListener('click', () => {
       if (!selectedCollection) {
-        showStatus('Please select a variable collection', 'error');
+        showStatus('Please select a variable collection first', 'error');
         return;
       }
+      
+      if (!scanResults || scanResults.validCount === 0) {
+        showStatus('No valid text layers found. Please scan first.', 'error');
+        return;
+      }
+      
       hideStatus();
       setState('processing');
-      isProcessing = true;
-      parent.postMessage({ 
-        pluginMessage: { 
-          type: 'create-variables', 
-          collectionId: selectedCollection 
-        } 
-      }, '*');
+      sendMessage({ 
+        type: 'create-variables', 
+        collectionId: selectedCollection 
+      });
     });
     
     elements.cancelButton.addEventListener('click', () => {
-      isProcessing = false;
-      setState('collection-selected');
-      showStatus('Processing cancelled', 'info');
+      if (isProcessing) {
+        setState('collection-selected');
+        showStatus('Processing cancelled', 'warning', 3000);
+      }
     });
     
     elements.createButton.addEventListener('click', () => {
+      setButtonLoading(elements.createButton, true);
       hideStatus();
-      parent.postMessage({ pluginMessage: { type: 'create-default-collection' } }, '*');
+      sendMessage({ type: 'create-default-collection' });
     });
     
-    // Message handling
+    // ============================================================================
+    // MESSAGE HANDLING
+    // ============================================================================
+    
     window.onmessage = (event) => {
       const msg = event.data.pluginMessage;
+      if (!msg) return;
       
-      if (msg.type === 'collections-loaded') {
-        collections = msg.collections;
-        populateCollectionSelect();
-        if (collections.length === 0) {
-          setState('startup');
-        }
-      }
-      
-      if (msg.type === 'collection-created') {
-        collections = msg.collections;
-        populateCollectionSelect();
-        selectCollection(msg.collectionId, 'Text to String');
-        showStatus('Collection created successfully!', 'success');
-      }
-      
-      if (msg.type === 'text-layers-found') {
-        textLayers = msg.layers;
-        scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
-        
-        updateTextCounter(msg.validCount, 'Text layers scanned');
-        
-        if (msg.validCount === 0) {
-          showStatus(`No valid text layers found. Found ${msg.totalCount} text layers total, but none are suitable for variable creation.`, 'error');
-          setState('startup');
-        } else {
-          if (selectedCollection) {
-            setState('collection-selected');
-          } else {
-            setState('startup');
-          }
-          showStatus(`Found ${msg.validCount} valid text layers ready for processing`, 'success');
-        }
-      }
-      
-      if (msg.type === 'progress-update') {
-        if (isProcessing) {
-          updateTextCounter(msg.remaining, 'Text layers to process');
-          updateProgress(msg.progress);
-        }
-      }
-      
-      if (msg.type === 'variables-created') {
-        isProcessing = false;
-        setState('completed');
-        
-        let message = `✅ Processing Complete!\n`;
-        message += `• Created: ${msg.created} new variables\n`;
-        message += `• Connected: ${msg.connected} to existing variables\n`;
-        if (msg.skipped > 0) {
-          message += `• Skipped: ${msg.skipped} empty layers\n`;
-        }
-        if (msg.errors > 0) {
-          message += `• Errors: ${msg.errors} failed to process\n`;
-        }
-        message += `\nTotal processed: ${msg.totalProcessed} text layers`;
-        
-        showStatus(message, msg.errors > 0 ? 'error' : 'success');
-        updateTextCounter(scanResults.validCount, 'Text layers scanned');
-      }
-      
-      if (msg.type === 'error') {
-        isProcessing = false;
-        setState('startup');
-        showStatus(msg.message, 'error');
+      try {
+        handleMessage(msg);
+      } catch (error) {
+        handleError(error, `handling message ${msg.type}`);
       }
     };
     
-    // Initialize
-    parent.postMessage({ pluginMessage: { type: 'get-collections' } }, '*');
-    parent.postMessage({ pluginMessage: { type: 'scan-text-layers' } }, '*');
-    setState('startup');
+    function handleMessage(msg) {
+      // Reset loading states
+      Object.values(elements).forEach(el => {
+        if (el && el.classList) {
+          el.classList.remove('loading');
+          el.disabled = false;
+        }
+      });
+      
+      switch (msg.type) {
+        case 'collections-loaded':
+          collections = msg.collections;
+          populateCollectionSelect();
+          if (collections.length === 0) {
+            showStatus('No variable collections found. Create one to get started.', 'warning');
+            setState('startup');
+          }
+          break;
+          
+        case 'collection-created':
+          collections = msg.collections;
+          populateCollectionSelect();
+          selectCollection(msg.collectionId);
+          showStatus('Collection created successfully!', 'success', 3000);
+          break;
+          
+        case 'text-layers-found':
+          textLayers = msg.layers;
+          scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
+          
+          updateTextCounter(msg.validCount);
+          
+          if (msg.validCount === 0) {
+            const message = msg.totalCount > 0 
+              ? `Found ${msg.totalCount} text layers, but none are suitable for variables.`
+              : 'No text layers found on the current page.';
+            showStatus(message, 'warning');
+            setState('startup');
+          } else {
+            const message = `Found ${msg.validCount} text layers ready for processing`;
+            showStatus(message, 'success', 3000);
+            
+            if (selectedCollection) {
+              setState('collection-selected');
+            } else {
+              setState('startup');
+            }
+          }
+          break;
+          
+        case 'progress-update':
+          updateProgress(msg.progress, msg.remaining);
+          break;
+          
+        case 'variables-created':
+          const result = msg.result;
+          setState('completed');
+          
+          // Create detailed success message
+          const parts = [];
+          if (result.created > 0) parts.push(`${result.created} new variables created`);
+          if (result.connected > 0) parts.push(`${result.connected} connected to existing`);
+          if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
+          if (result.errors > 0) parts.push(`${result.errors} errors`);
+          
+          const message = parts.length > 0 ? parts.join(', ') : 'Processing completed';
+          showStatus(`✅ Success: ${message}`, 'success', 5000);
+          updateTextCounter(result.totalProcessed, 'Variables processed');
+          break;
+          
+        case 'error':
+          handleError(msg.message);
+          break;
+          
+        default:
+          console.warn('Unknown message type:', msg.type);
+      }
+    }
+    
+    function sendMessage(message) {
+      parent.postMessage({ pluginMessage: message }, '*');
+    }
+    
+    // ============================================================================
+    // INITIALIZATION
+    // ============================================================================
+    
+    function initializePlugin() {
+      try {
+        sendMessage({ type: 'get-collections' });
+        sendMessage({ type: 'scan-text-layers' });
+        setState('startup');
+      } catch (error) {
+        handleError(error, 'initializing plugin');
+      }
+    }
+    
+    // Initialize plugin
+    initializePlugin();
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && !isProcessing) {
+        // Refresh data when plugin becomes visible
+        sendMessage({ type: 'get-collections' });
+        sendMessage({ type: 'scan-text-layers' });
+      }
+    });
   </script>
 </body>
 </html>
