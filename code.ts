@@ -56,7 +56,7 @@ class PluginError extends Error {
 
 type MessageFromUI = 
   | { type: 'get-collections' }
-  | { type: 'scan-text-layers'; selectedCollectionId?: string; includeVariants?: boolean }
+  | { type: 'scan-text-layers'; selectedCollectionId?: string }
   | { type: 'create-variables'; collectionId: string; options?: Record<string, unknown> }
   | { type: 'create-default-collection' };
 
@@ -168,14 +168,17 @@ function truncateVariableName(text: string): string {
 
 function validateTextLayer(node: TextNode): boolean {
   try {
+    // Skip layers already bound to variables
     if (node.boundVariables?.characters) {
       return false;
     }
     
+    // Skip hidden or locked layers
     if (node.locked || !node.visible) {
       return false;
     }
     
+    // Check if text content is valid for variable creation
     return isValidTextForVariable(node.characters);
   } catch (error) {
     console.warn(`Error validating text layer ${node.id}:`, error);
@@ -183,38 +186,13 @@ function validateTextLayer(node: TextNode): boolean {
   }
 }
 
-function getValidTextLayers(includeVariants: boolean = true): { 
+function getValidTextLayers(): { 
   layers: TextNode[], 
   validCount: number, 
   totalCount: number 
 } {
   try {
-    let allTextNodes: TextNode[];
-    
-    if (includeVariants) {
-      // Original behavior: get ALL text nodes including variants
-      allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
-    } else {
-      // New behavior: only get visible text nodes (exclude variant instances)
-      allTextNodes = figma.currentPage.findAll(node => {
-        if (node.type !== "TEXT") return false;
-        
-        // Check if this text node is in a component instance
-        let parent = node.parent;
-        while (parent) {
-          if (parent.type === "INSTANCE") {
-            // This text node is inside a component instance
-            // Only include it if the instance is visible (not a hidden variant)
-            return parent.visible;
-          }
-          parent = parent.parent;
-        }
-        
-        // Text node is not in a component instance, include it
-        return true;
-      }) as TextNode[];
-    }
-    
+    const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
     const validTextNodes = allTextNodes.filter(validateTextLayer);
     
     return {
@@ -446,7 +424,7 @@ async function handleMessage(msg: MessageFromUI): Promise<void> {
       await handleGetCollections();
       break;
     case 'scan-text-layers':
-      await handleScanTextLayers(msg.selectedCollectionId, msg.includeVariants);
+      await handleScanTextLayers(msg.selectedCollectionId);
       break;
     case 'create-variables':
       await handleCreateVariables(msg.collectionId, msg.options);
@@ -471,7 +449,7 @@ async function handleGetCollections(): Promise<void> {
   }
 }
 
-async function handleScanTextLayers(selectedCollectionId?: string, includeVariants: boolean = true): Promise<void> {
+async function handleScanTextLayers(selectedCollectionId?: string): Promise<void> {
   try {
     // First, get current collections to validate the selected one
     const collections = await getVariableCollections();
@@ -488,7 +466,7 @@ async function handleScanTextLayers(selectedCollectionId?: string, includeVarian
       }
     }
     
-    const result = getValidTextLayers(includeVariants);
+    const result = getValidTextLayers();
     
     sendMessage({
       type: 'text-layers-found',
@@ -503,7 +481,7 @@ async function handleScanTextLayers(selectedCollectionId?: string, includeVarian
     
     if (result.validCount === 0) {
       const message = result.totalCount > 0 
-        ? `Found ${result.totalCount} text layers, but none are suitable for variable creation.`
+        ? `Found ${result.totalCount} text layers, but none are suitable for variable creation (may be hidden, locked, or already bound to variables).`
         : 'No text layers found on the current page.';
       
       figma.notify(message, { timeout: 3000 });
@@ -527,7 +505,7 @@ async function handleCreateVariables(collectionId: string, options?: Record<stri
   isProcessing = true;
   
   try {
-    const { layers: textLayers } = getValidTextLayers(true); // Always include variants for processing
+    const { layers: textLayers } = getValidTextLayers();
     
     if (textLayers.length === 0) {
       throw new PluginError('No valid text layers found for processing');
