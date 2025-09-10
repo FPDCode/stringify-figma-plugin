@@ -126,13 +126,29 @@ function isValidTextForVariable(text: string): boolean {
   return VARIABLE_NAME_PATTERNS.SAFE_CHARS.test(firstChar);
 }
 
-function createVariableName(text: string): string {
+function createVariableName(text: string, textNode?: TextNode): string {
   if (!text || text.trim().length === 0) {
     throw new PluginError('Cannot create variable name from empty text', {
       code: ERROR_CODES.INVALID_TEXT
     });
   }
 
+  // If no textNode provided, use simple naming
+  if (!textNode) {
+    return createSimpleVariableName(text);
+  }
+
+  // Create hierarchical naming: Group 2 / Group 1 / Name
+  const hierarchicalName = createHierarchicalVariableName(text, textNode);
+  
+  if (hierarchicalName.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
+    return truncateVariableName(hierarchicalName);
+  }
+
+  return hierarchicalName;
+}
+
+function createSimpleVariableName(text: string): string {
   let processed = text
     .trim()
     .toLowerCase()
@@ -145,11 +161,65 @@ function createVariableName(text: string): string {
     processed = 'text_variable';
   }
 
-  if (processed.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
-    return truncateVariableName(processed);
-  }
-
   return processed;
+}
+
+function createHierarchicalVariableName(text: string, textNode: TextNode): string {
+  const parts: string[] = [];
+  
+  // Get the text layer name (sanitized)
+  const textName = sanitizeName(text.trim());
+  if (!textName) {
+    return 'text_variable';
+  }
+  
+  // Find Group 1 (one level higher than text layer)
+  let group1 = '';
+  const parent = textNode.parent;
+  
+  if (parent && parent.type !== 'PAGE') {
+    group1 = sanitizeName(parent.name);
+  }
+  
+  // Find Group 2 (root component or "root")
+  let group2 = 'root';
+  let currentParent = parent;
+  
+  // Traverse up to find the root component
+  while (currentParent && currentParent.type !== 'PAGE') {
+    if (currentParent.type === 'COMPONENT' || currentParent.type === 'COMPONENT_SET') {
+      group2 = sanitizeName(currentParent.name);
+      break;
+    }
+    currentParent = currentParent.parent;
+  }
+  
+  // Build the hierarchical name: Group 2 / Group 1 / Name
+  if (group2 && group2 !== 'root') {
+    parts.push(group2);
+  }
+  
+  if (group1) {
+    parts.push(group1);
+  }
+  
+  parts.push(textName);
+  
+  return parts.join('_');
+}
+
+function sanitizeName(name: string): string {
+  if (!name || name.trim().length === 0) {
+    return '';
+  }
+  
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '')
+    .replace(/\s+/g, '_')
+    .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
+    .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
 }
 
 function truncateVariableName(text: string): string {
@@ -235,12 +305,12 @@ function getValidTextLayers(): {
   }
 }
 
-function preprocessTextForVariable(text: string): TextProcessingResult {
+function preprocessTextForVariable(text: string, textNode?: TextNode): TextProcessingResult {
   const trimmed = text.trim();
   return {
     original: text,
     processed: trimmed,
-    variableName: createVariableName(trimmed)
+    variableName: createVariableName(trimmed, textNode)
   };
 }
 
@@ -640,8 +710,10 @@ async function processTextLayer(
     return;
   }
 
-  // Process text layer using standard logic
-  const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters);
+  // Process text layer using standard logic with hierarchical naming
+  const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters, textLayer);
+  
+  console.log(`Creating variable for "${textLayer.name}": "${textContent}" → "${variableName}"`);
   
   if (!textContent) {
     stats.skipped++;
