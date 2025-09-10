@@ -541,6 +541,10 @@
         }
       });
       
+      // Re-enable collection select (will be disabled again in processing state if needed)
+      elements.collectionSelect.disabled = false;
+      elements.collectionSelect.style.opacity = '1';
+      
       // Hide all dynamic elements
       elements.scanButton.classList.add('hidden');
       elements.processButton.classList.add('hidden');
@@ -571,6 +575,9 @@
           // Hide both process and create buttons during processing
           elements.processButton.classList.add('hidden');
           elements.createButton.classList.add('hidden');
+          // Disable collection selection during processing
+          elements.collectionSelect.disabled = true;
+          elements.collectionSelect.style.opacity = '0.6';
           isProcessing = true;
           break;
           
