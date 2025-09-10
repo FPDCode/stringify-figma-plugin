@@ -170,16 +170,41 @@ function validateTextLayer(node: TextNode): boolean {
   try {
     // Skip layers already bound to variables
     if (node.boundVariables?.characters) {
+      console.log(`Skipping ${node.name}: already bound to variable`);
       return false;
     }
     
-    // Skip hidden or locked layers
-    if (node.locked || !node.visible) {
+    // Skip locked layers
+    if (node.locked) {
+      console.log(`Skipping ${node.name}: layer is locked`);
       return false;
+    }
+    
+    // Skip hidden layers - check both visible property and parent visibility
+    if (!node.visible) {
+      console.log(`Skipping ${node.name}: layer is hidden (visible: ${node.visible})`);
+      return false;
+    }
+    
+    // Additional check: if parent is hidden, this layer should also be considered hidden
+    let parent = node.parent;
+    while (parent && parent.type !== 'PAGE') {
+      if ('visible' in parent && !parent.visible) {
+        console.log(`Skipping ${node.name}: parent layer "${parent.name}" is hidden`);
+        return false;
+      }
+      parent = parent.parent;
     }
     
     // Check if text content is valid for variable creation
-    return isValidTextForVariable(node.characters);
+    const isValidText = isValidTextForVariable(node.characters);
+    if (!isValidText) {
+      console.log(`Skipping ${node.name}: invalid text content`);
+      return false;
+    }
+    
+    console.log(`Including ${node.name}: valid text layer`);
+    return true;
   } catch (error) {
     console.warn(`Error validating text layer ${node.id}:`, error);
     return false;
@@ -193,7 +218,11 @@ function getValidTextLayers(): {
 } {
   try {
     const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
+    console.log(`Found ${allTextNodes.length} total text layers on page`);
+    
     const validTextNodes = allTextNodes.filter(validateTextLayer);
+    
+    console.log(`Validation complete: ${validTextNodes.length} valid layers out of ${allTextNodes.length} total`);
     
     return {
       layers: validTextNodes,
