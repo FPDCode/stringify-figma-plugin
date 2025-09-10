@@ -1,6 +1,6 @@
 "use strict";
 // Stringify Plugin - Convert text layers to variables
-// Enhanced V2 implementation with consolidated architecture
+// Enhanced V2 implementation with consolidated modular architecture
 class PluginError extends Error {
     constructor(message, options) {
         super(message);
@@ -264,11 +264,14 @@ function getFromVariableCache(cache, variableName, content) {
     return entry ? entry.variable : null;
 }
 // ============================================================================
-// MAIN PLUGIN LOGIC
+// PLUGIN STATE MANAGEMENT
 // ============================================================================
 // Plugin state management
 let isProcessing = false;
 let currentOperation = null;
+// ============================================================================
+// MAIN PLUGIN LOGIC
+// ============================================================================
 // Show the UI
 figma.showUI(__html__, PLUGIN_CONFIG.UI_DIMENSIONS);
 // Enhanced message handling with comprehensive error handling
@@ -291,10 +294,10 @@ async function handleMessage(msg) {
             await handleGetCollections();
             break;
         case 'scan-text-layers':
-            await handleScanTextLayers();
+            await handleScanTextLayers(msg.selectedCollectionId);
             break;
         case 'create-variables':
-            await handleCreateVariables(msg.collectionId);
+            await handleCreateVariables(msg.collectionId, msg.options);
             break;
         case 'create-default-collection':
             await handleCreateDefaultCollection();
@@ -315,12 +318,25 @@ async function handleGetCollections() {
         throw new PluginError(`Failed to load collections: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-async function handleScanTextLayers() {
+async function handleScanTextLayers(selectedCollectionId) {
     try {
+        // First, get current collections to validate the selected one
+        const collections = await getVariableCollections();
+        // Check if the selected collection still exists
+        if (selectedCollectionId) {
+            const collectionExists = collections.some(collection => collection.id === selectedCollectionId);
+            if (!collectionExists) {
+                sendMessage({
+                    type: 'collection-invalid',
+                    message: 'The selected collection no longer exists. Please select a different collection.'
+                });
+                return;
+            }
+        }
         const result = getValidTextLayers();
         sendMessage({
             type: 'text-layers-found',
-            layers: result.layers.map(layer => ({
+            layers: result.layers.map((layer) => ({
                 id: layer.id,
                 name: layer.name,
                 characters: layer.characters
@@ -339,7 +355,9 @@ async function handleScanTextLayers() {
         throw new PluginError(`Failed to scan text layers: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-async function handleCreateVariables(collectionId) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function handleCreateVariables(collectionId, options) {
+    // options parameter reserved for future extensibility
     if (!collectionId) {
         throw new PluginError('Collection ID is required');
     }
@@ -425,6 +443,7 @@ async function processTextLayer(textLayer, existingVariables, variableCache, col
         stats.skipped++;
         return;
     }
+    // Process text layer using standard logic
     const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters);
     if (!textContent) {
         stats.skipped++;
@@ -470,11 +489,17 @@ function createProcessingSummary(result) {
     return `Processing complete: ${summary}`;
 }
 function handlePluginError(error) {
-    const message = error instanceof PluginError
-        ? error.message
-        : error instanceof Error
-            ? error.message
-            : 'An unexpected error occurred';
+    let message;
+    if (error && typeof error === 'object' && 'message' in error && 'code' in error) {
+        // PluginError instance
+        message = error.message;
+    }
+    else if (error instanceof Error) {
+        message = error.message;
+    }
+    else {
+        message = 'An unexpected error occurred';
+    }
     sendMessage({
         type: 'error',
         message

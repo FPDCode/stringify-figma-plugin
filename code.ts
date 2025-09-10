@@ -1,5 +1,6 @@
 // Stringify Plugin - Convert text layers to variables
-// Enhanced V2 implementation with consolidated architecture
+// Enhanced V2 implementation with consolidated modular architecture
+
 
 // ============================================================================
 // TYPES AND INTERFACES
@@ -29,19 +30,17 @@ interface ProcessingResult extends ProcessingStats {
   totalProcessed: number;
 }
 
-type MessageFromUI = 
-  | { type: 'get-collections' }
-  | { type: 'scan-text-layers' }
-  | { type: 'create-variables'; collectionId: string }
-  | { type: 'create-default-collection' };
+interface TextProcessingResult {
+  original: string;
+  processed: string;
+  variableName: string;
+}
 
-type MessageToUI = 
-  | { type: 'collections-loaded'; collections: CollectionInfo[] }
-  | { type: 'collection-created'; collectionId: string; collections: CollectionInfo[] }
-  | { type: 'text-layers-found'; layers: TextLayerInfo[]; validCount: number; totalCount: number }
-  | { type: 'progress-update'; progress: number; remaining: number }
-  | { type: 'variables-created'; result: ProcessingResult }
-  | { type: 'error'; message: string };
+interface VariableCacheEntry {
+  variable: Variable;
+  name: string;
+  content: string;
+}
 
 class PluginError extends Error {
   public readonly code?: string;
@@ -55,17 +54,20 @@ class PluginError extends Error {
   }
 }
 
-interface TextProcessingResult {
-  original: string;
-  processed: string;
-  variableName: string;
-}
+type MessageFromUI = 
+  | { type: 'get-collections' }
+  | { type: 'scan-text-layers'; selectedCollectionId?: string }
+  | { type: 'create-variables'; collectionId: string; options?: Record<string, unknown> }
+  | { type: 'create-default-collection' };
 
-interface VariableCacheEntry {
-  variable: Variable;
-  name: string;
-  content: string;
-}
+type MessageToUI = 
+  | { type: 'collections-loaded'; collections: CollectionInfo[] }
+  | { type: 'collection-created'; collectionId: string; collections: CollectionInfo[] }
+  | { type: 'text-layers-found'; layers: TextLayerInfo[]; validCount: number; totalCount: number }
+  | { type: 'progress-update'; progress: number; remaining: number }
+  | { type: 'variables-created'; result: ProcessingResult }
+  | { type: 'collection-invalid'; message: string }
+  | { type: 'error'; message: string };
 
 // ============================================================================
 // CONSTANTS
@@ -81,6 +83,7 @@ const PLUGIN_CONFIG = {
     height: 560
   }
 } as const;
+
 
 const ERROR_CODES = {
   COLLECTION_NOT_FOUND: 'COLLECTION_NOT_FOUND',
@@ -385,12 +388,16 @@ function getFromVariableCache(
 }
 
 // ============================================================================
-// MAIN PLUGIN LOGIC
+// PLUGIN STATE MANAGEMENT
 // ============================================================================
 
 // Plugin state management
 let isProcessing = false;
 let currentOperation: string | null = null;
+
+// ============================================================================
+// MAIN PLUGIN LOGIC
+// ============================================================================
 
 // Show the UI
 figma.showUI(__html__, PLUGIN_CONFIG.UI_DIMENSIONS);
@@ -414,10 +421,10 @@ async function handleMessage(msg: MessageFromUI): Promise<void> {
       await handleGetCollections();
       break;
     case 'scan-text-layers':
-      await handleScanTextLayers();
+      await handleScanTextLayers(msg.selectedCollectionId);
       break;
     case 'create-variables':
-      await handleCreateVariables(msg.collectionId);
+      await handleCreateVariables(msg.collectionId, msg.options);
       break;
     case 'create-default-collection':
       await handleCreateDefaultCollection();
@@ -439,13 +446,28 @@ async function handleGetCollections(): Promise<void> {
   }
 }
 
-async function handleScanTextLayers(): Promise<void> {
+async function handleScanTextLayers(selectedCollectionId?: string): Promise<void> {
   try {
+    // First, get current collections to validate the selected one
+    const collections = await getVariableCollections();
+    
+    // Check if the selected collection still exists
+    if (selectedCollectionId) {
+      const collectionExists = collections.some(collection => collection.id === selectedCollectionId);
+      if (!collectionExists) {
+        sendMessage({
+          type: 'collection-invalid',
+          message: 'The selected collection no longer exists. Please select a different collection.'
+        });
+        return;
+      }
+    }
+    
     const result = getValidTextLayers();
     
     sendMessage({
       type: 'text-layers-found',
-      layers: result.layers.map(layer => ({
+      layers: result.layers.map((layer: TextNode) => ({
         id: layer.id,
         name: layer.name,
         characters: layer.characters
@@ -466,7 +488,9 @@ async function handleScanTextLayers(): Promise<void> {
   }
 }
 
-async function handleCreateVariables(collectionId: string): Promise<void> {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function handleCreateVariables(collectionId: string, options?: Record<string, unknown>): Promise<void> {
+  // options parameter reserved for future extensibility
   if (!collectionId) {
     throw new PluginError('Collection ID is required');
   }
@@ -515,6 +539,7 @@ async function handleCreateDefaultCollection(): Promise<void> {
     throw new PluginError(`Failed to create collection: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
 
 async function processTextLayersWithProgress(
   textLayers: TextNode[], 
@@ -583,6 +608,7 @@ async function processTextLayer(
     return;
   }
 
+  // Process text layer using standard logic
   const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters);
   
   if (!textContent) {
@@ -615,6 +641,7 @@ async function processTextLayer(
   }
 }
 
+
 function createProcessingSummary(result: ProcessingResult): string {
   const parts = [];
   
@@ -639,11 +666,16 @@ function createProcessingSummary(result: ProcessingResult): string {
 }
 
 function handlePluginError(error: unknown): void {
-  const message = error instanceof PluginError 
-    ? error.message 
-    : error instanceof Error
-    ? error.message
-    : 'An unexpected error occurred';
+  let message: string;
+  
+  if (error && typeof error === 'object' && 'message' in error && 'code' in error) {
+    // PluginError instance
+    message = (error as { message: string }).message;
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = 'An unexpected error occurred';
+  }
   
   sendMessage({
     type: 'error',

@@ -449,7 +449,7 @@
         aria-describedby="scan-description"
         aria-label="Scan text layers"
       >
-        🔍 Rescan Text Layers
+        🔍 Rescan
       </button>
       <div id="scan-description" class="sr-only">
         Scan the current page for text layers that can be converted to variables
@@ -744,7 +744,10 @@
     elements.scanButton.addEventListener('click', () => {
       setButtonLoading(elements.scanButton, true);
       hideStatus();
-      sendMessage({ type: 'scan-text-layers' });
+      sendMessage({ 
+        type: 'scan-text-layers',
+        selectedCollectionId: selectedCollection
+      });
     });
     
     elements.processButton.addEventListener('click', () => {
@@ -867,8 +870,21 @@
           
           // Auto-rescan after processing to show updated eligible text layers
           setTimeout(() => {
-            sendMessage({ type: 'scan-text-layers' });
+            sendMessage({ 
+              type: 'scan-text-layers',
+              selectedCollectionId: selectedCollection
+            });
           }, 1000); // Wait 1 second to let the success message show
+          break;
+          
+        case 'collection-invalid':
+          // Collection no longer exists - reset to default state
+          selectedCollection = null;
+          elements.collectionSelect.value = '';
+          populateCollectionSelect();
+          updateDynamicButton();
+          setState('startup');
+          showStatus(msg.message, 'warning', 5000);
           break;
           
         case 'error':
@@ -891,7 +907,10 @@
     function initializePlugin() {
       try {
         sendMessage({ type: 'get-collections' });
-        sendMessage({ type: 'scan-text-layers' });
+        sendMessage({ 
+          type: 'scan-text-layers',
+          selectedCollectionId: selectedCollection
+        });
         setState('startup');
       } catch (error) {
         handleError(error, 'initializing plugin');
@@ -906,7 +925,10 @@
       if (!document.hidden && !isProcessing) {
         // Refresh data when plugin becomes visible
         sendMessage({ type: 'get-collections' });
-        sendMessage({ type: 'scan-text-layers' });
+        sendMessage({ 
+          type: 'scan-text-layers',
+          selectedCollectionId: selectedCollection
+        });
       }
     });
   </script>
