@@ -436,50 +436,46 @@ async function scanForGhostVariables() {
             if (!isValidTextForVariable(textNode.characters)) {
                 continue;
             }
-            // Check for ghost variables using the PRD-specified logic
-            try {
-                const boundVariable = textNode.getBoundVariable('characters');
-                // No connection at all - not a ghost, just unconnected
-                if (!boundVariable || boundVariable.type !== 'VARIABLE_ALIAS') {
-                    continue;
-                }
-                // We have a bound variable - check if it's a ghost
+            const bindings = ['characters'];
+            for (const binding of bindings) {
                 try {
+                    // Get bound variable directly - this is the primary detection method
+                    const boundVariable = textNode.getBoundVariable(binding);
+                    // No connection at all - skip this binding
+                    if (!boundVariable) {
+                        continue;
+                    }
+                    // Check if it's a variable alias (as per PRD specification)
+                    if (boundVariable.type !== 'VARIABLE_ALIAS') {
+                        continue;
+                    }
+                    // Try to get the actual variable to see if it still exists
                     const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
                     if (!variable) {
-                        // Ghost variable - binding exists but variable is deleted
+                        // This is a ghost variable - the binding exists but the variable doesn't
                         ghosts.push({
                             nodeId: textNode.id,
                             nodeName: textNode.name,
                             textContent: textNode.characters,
-                            bindingType: 'characters',
+                            bindingType: binding,
                             ghostVariableId: boundVariable.id
                         });
                     }
-                    // If variable exists, it's a valid connection - not a ghost
+                    // If variable exists, it's a valid connection - do nothing (not a ghost)
                 }
-                catch (apiError) {
-                    // API error - likely indicates ghost variable
-                    ghosts.push({
-                        nodeId: textNode.id,
-                        nodeName: textNode.name,
-                        textContent: textNode.characters,
-                        bindingType: 'characters',
-                        ghostVariableId: boundVariable.id
-                    });
-                }
-            }
-            catch (bindingError) {
-                // getBoundVariable() threw an error - this might be a ghost
-                // Only report as ghost if there was actually a binding attempt
-                if (textNode.boundVariables && textNode.boundVariables.characters) {
-                    ghosts.push({
-                        nodeId: textNode.id,
-                        nodeName: textNode.name,
-                        textContent: textNode.characters,
-                        bindingType: 'characters',
-                        ghostVariableId: 'binding-error'
-                    });
+                catch (error) {
+                    // getBoundVariable() threw an error - check if there's actually a binding
+                    if (textNode.boundVariables && textNode.boundVariables[binding]) {
+                        // There's a binding but getBoundVariable() failed - this is a ghost
+                        ghosts.push({
+                            nodeId: textNode.id,
+                            nodeName: textNode.name,
+                            textContent: textNode.characters,
+                            bindingType: binding,
+                            ghostVariableId: 'corrupted-binding'
+                        });
+                    }
+                    // If no binding exists, it's just an error we can ignore
                 }
             }
         }
