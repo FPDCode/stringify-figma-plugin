@@ -1353,6 +1353,9 @@
           updateTextCounter(msg.validCount, 'Text layers ready');
           updateDynamicButton(); // Update button based on scan results
           
+          // Also scan for ghost variables to keep Ghostbuster tab in sync
+          sendMessage({ type: 'scan-ghost-variables' });
+          
           if (msg.validCount === 0) {
             const message = msg.totalCount > 0 
               ? `Found ${msg.totalCount} text layers, but none are suitable for variables (may be hidden, locked, or already bound to variables).`
@@ -1450,6 +1453,9 @@
             // Update text counter based on selection scope
             updateTextCounter(msg.scope.textLayerCount, 'Text layers ready');
             updateDynamicButton();
+            
+            // Also scan for ghost variables to keep Ghostbuster tab in sync
+            sendMessage({ type: 'scan-ghost-variables' });
           }, 16); // ~60fps update rate
           break;
           
