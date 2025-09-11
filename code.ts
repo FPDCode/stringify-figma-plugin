@@ -642,50 +642,52 @@ async function scanForGhostVariables(): Promise<GhostVariable[]> {
         continue;
       }
       
-      const bindings = ['characters'] as const;
-      
-      for (const binding of bindings) {
+      // Check for ghost variables using the PRD-specified logic
+      try {
+        const boundVariable = (textNode as any).getBoundVariable('characters');
+        
+        // No connection at all - not a ghost, just unconnected
+        if (!boundVariable || boundVariable.type !== 'VARIABLE_ALIAS') {
+          continue;
+        }
+
+        // We have a bound variable - check if it's a ghost
         try {
-          // Pre-check: Only process layers that actually have bound variables
-          if (!textNode.boundVariables || !textNode.boundVariables[binding]) {
-            continue;
-          }
-          
-          const boundVariable = (textNode as any).getBoundVariable(binding);
-          if (!boundVariable) {
-            // Binding exists but getBoundVariable returns null - this is a ghost
-            ghosts.push({
-              nodeId: textNode.id,
-              nodeName: textNode.name,
-              textContent: textNode.characters,
-              bindingType: binding,
-              ghostVariableId: 'null-reference'
-            });
-            continue;
-          }
-          
-          // Try to get the variable to see if it still exists
           const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
+          
           if (!variable) {
-            // This is a ghost variable - the binding exists but the variable doesn't
+            // Ghost variable - binding exists but variable is deleted
             ghosts.push({
               nodeId: textNode.id,
               nodeName: textNode.name,
               textContent: textNode.characters,
-              bindingType: binding,
+              bindingType: 'characters',
               ghostVariableId: boundVariable.id
             });
           }
-          // If variable exists, it's a valid connection - do nothing (not a ghost)
+          // If variable exists, it's a valid connection - not a ghost
           
-        } catch (error) {
-          // getBoundVariable() or getVariableByIdAsync() threw an error - this is a ghost
+        } catch (apiError) {
+          // API error - likely indicates ghost variable
           ghosts.push({
             nodeId: textNode.id,
             nodeName: textNode.name,
             textContent: textNode.characters,
-            bindingType: binding,
-            ghostVariableId: 'error'
+            bindingType: 'characters',
+            ghostVariableId: boundVariable.id
+          });
+        }
+        
+      } catch (bindingError) {
+        // getBoundVariable() threw an error - this might be a ghost
+        // Only report as ghost if there was actually a binding attempt
+        if (textNode.boundVariables && textNode.boundVariables.characters) {
+          ghosts.push({
+            nodeId: textNode.id,
+            nodeName: textNode.name,
+            textContent: textNode.characters,
+            bindingType: 'characters',
+            ghostVariableId: 'binding-error'
           });
         }
       }
