@@ -79,43 +79,74 @@ function createSimpleVariableName(text) {
 }
 function createHierarchicalVariableName(text, textNode) {
     const parts = [];
-    // Use the layer name instead of text content for variable naming
+    // Use the layer name for variable naming (no text content suffix)
     let textName = sanitizeName(textNode.name);
     if (!textName) {
-        return 'text_variable';
+        textName = 'text_variable';
     }
-    // Find Group 1 (one level higher than text layer)
-    let group1 = '';
-    const parent = textNode.parent;
-    if (parent && parent.type !== 'PAGE') {
-        group1 = sanitizeName(parent.name);
+    // Find meaningful parent using smart hierarchy traversal
+    const meaningfulParent = findMeaningfulParent(textNode);
+    // Find root component
+    const rootComponent = findRootComponent(textNode);
+    // Build the hierarchical name: Component / MeaningfulParent / LayerName
+    if (rootComponent && rootComponent !== 'root') {
+        parts.push(rootComponent);
     }
-    // Find Group 2 (root component or "root")
-    let group2 = 'root';
-    let currentParent = parent;
-    // Traverse up to find the root component
-    while (currentParent && currentParent.type !== 'PAGE') {
-        if (currentParent.type === 'COMPONENT' || currentParent.type === 'COMPONENT_SET') {
-            group2 = sanitizeName(currentParent.name);
-            break;
-        }
-        currentParent = currentParent.parent;
-    }
-    // Build the hierarchical name: Group 2 / Group 1 / Name
-    if (group2 && group2 !== 'root') {
-        parts.push(group2);
-    }
-    if (group1) {
-        parts.push(group1);
-    }
-    // Add suffix based on text content to make unique
-    const textSuffix = sanitizeName(text);
-    if (textSuffix && textSuffix !== textName) {
-        textName = `${textName}_${textSuffix}`;
+    if (meaningfulParent && meaningfulParent !== rootComponent) {
+        parts.push(meaningfulParent);
     }
     parts.push(textName);
     const finalName = parts.join('/');
     return finalName;
+}
+function findMeaningfulParent(textNode) {
+    let currentParent = textNode.parent;
+    const maxLevels = 10; // Prevent infinite loops
+    let level = 0;
+    while (currentParent && currentParent.type !== 'PAGE' && level < maxLevels) {
+        const sanitizedName = sanitizeName(currentParent.name);
+        // Check if this is a meaningful name (not generic)
+        if (sanitizedName && !isGenericName(sanitizedName)) {
+            return sanitizedName;
+        }
+        // Stop if we hit a component boundary (unless it's also generic)
+        if (currentParent.type === 'COMPONENT' || currentParent.type === 'COMPONENT_SET') {
+            return sanitizedName || 'component';
+        }
+        currentParent = currentParent.parent;
+        level++;
+    }
+    return ''; // No meaningful parent found
+}
+function findRootComponent(textNode) {
+    let currentParent = textNode.parent;
+    // Traverse up to find the root component
+    while (currentParent && currentParent.type !== 'PAGE') {
+        if (currentParent.type === 'COMPONENT' || currentParent.type === 'COMPONENT_SET') {
+            const componentName = sanitizeName(currentParent.name);
+            return componentName || 'component';
+        }
+        currentParent = currentParent.parent;
+    }
+    return ''; // Not inside a component
+}
+function isGenericName(name) {
+    const genericPatterns = [
+        /^frame(_\d+)?$/i,
+        /^group(_\d+)?$/i,
+        /^auto.?layout(_\d+)?$/i,
+        /^container(_\d+)?$/i,
+        /^rectangle(_\d+)?$/i,
+        /^ellipse(_\d+)?$/i,
+        /^polygon(_\d+)?$/i,
+        /^star(_\d+)?$/i,
+        /^line(_\d+)?$/i,
+        /^vector(_\d+)?$/i,
+        /^untitled(_\d+)?$/i,
+        /^\d+$/,
+        /^layer(_\d+)?$/i
+    ];
+    return genericPatterns.some(pattern => pattern.test(name));
 }
 function sanitizeName(name) {
     if (!name || name.trim().length === 0) {
@@ -439,17 +470,23 @@ async function scanForGhostVariables() {
             const bindings = ['characters'];
             for (const binding of bindings) {
                 try {
-                    // Get bound variable directly - this is the primary detection method
+                    // Pre-check: Only process layers that actually have bound variables
+                    if (!textNode.boundVariables || !textNode.boundVariables[binding]) {
+                        continue;
+                    }
                     const boundVariable = textNode.getBoundVariable(binding);
-                    // No connection at all - skip this binding
                     if (!boundVariable) {
+                        // Binding exists but getBoundVariable returns null - this is a ghost
+                        ghosts.push({
+                            nodeId: textNode.id,
+                            nodeName: textNode.name,
+                            textContent: textNode.characters,
+                            bindingType: binding,
+                            ghostVariableId: 'null-reference'
+                        });
                         continue;
                     }
-                    // Check if it's a variable alias (as per PRD specification)
-                    if (boundVariable.type !== 'VARIABLE_ALIAS') {
-                        continue;
-                    }
-                    // Try to get the actual variable to see if it still exists
+                    // Try to get the variable to see if it still exists
                     const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
                     if (!variable) {
                         // This is a ghost variable - the binding exists but the variable doesn't
@@ -464,18 +501,14 @@ async function scanForGhostVariables() {
                     // If variable exists, it's a valid connection - do nothing (not a ghost)
                 }
                 catch (error) {
-                    // getBoundVariable() threw an error - check if there's actually a binding
-                    if (textNode.boundVariables && textNode.boundVariables[binding]) {
-                        // There's a binding but getBoundVariable() failed - this is a ghost
-                        ghosts.push({
-                            nodeId: textNode.id,
-                            nodeName: textNode.name,
-                            textContent: textNode.characters,
-                            bindingType: binding,
-                            ghostVariableId: 'corrupted-binding'
-                        });
-                    }
-                    // If no binding exists, it's just an error we can ignore
+                    // getBoundVariable() or getVariableByIdAsync() threw an error - this is a ghost
+                    ghosts.push({
+                        nodeId: textNode.id,
+                        nodeName: textNode.name,
+                        textContent: textNode.characters,
+                        bindingType: binding,
+                        ghostVariableId: 'error'
+                    });
                 }
             }
         }
