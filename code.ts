@@ -653,7 +653,7 @@ function getFromVariableCache(
 
 async function scanForGhostVariables(): Promise<GhostVariable[]> {
   try {
-    // Build a Set of all valid variable IDs from all collections (reliable method)
+    // Phase 1: Build Set of all valid variable IDs from all collections
     const allValidVariableIds = await buildValidVariableIdSet();
     
     // Ghostbuster should always scan the entire page, not selection-aware
@@ -684,16 +684,9 @@ async function scanForGhostVariables(): Promise<GhostVariable[]> {
         continue;
       }
       
-      const ghostStatus = await checkVariableConnection(textNode, allValidVariableIds);
-      
-      if (ghostStatus.isGhost) {
-        ghosts.push({
-          nodeId: textNode.id,
-          nodeName: textNode.name,
-          textContent: textNode.characters,
-          bindingType: 'characters',
-          ghostVariableId: ghostStatus.variableId || 'unknown'
-        });
+      const ghostInfo = await checkVariableConnection(textNode, allValidVariableIds);
+      if (ghostInfo) {
+        ghosts.push(ghostInfo);
       }
     }
     
@@ -711,7 +704,7 @@ async function buildValidVariableIdSet(): Promise<Set<string>> {
     // Get all variable collections in the file
     const collections = await figma.variables.getLocalVariableCollectionsAsync();
     
-    // Add all variable IDs from all collections to our Set
+    // Build Set of all valid variable IDs
     for (const collection of collections) {
       collection.variableIds.forEach(id => {
         allValidVariableIds.add(id);
@@ -719,67 +712,54 @@ async function buildValidVariableIdSet(): Promise<Set<string>> {
     }
     
     console.log(`Built valid variable ID set with ${allValidVariableIds.size} variables from ${collections.length} collections`);
+    return allValidVariableIds;
     
   } catch (error) {
     console.error('Error building valid variable ID set:', error);
-    // Return empty set on error - will treat all as potential ghosts
+    return allValidVariableIds; // Return empty set on error
   }
+}
+
+async function checkVariableConnection(textNode: TextNode, allValidVariableIds: Set<string>): Promise<GhostVariable | null> {
+  const binding = 'characters';
   
-  return allValidVariableIds;
-}
-
-interface VariableConnectionStatus {
-  hasConnection: boolean;
-  isGhost: boolean;
-  isValid: boolean;
-  variableId?: string;
-  errorReason?: string;
-}
-
-async function checkVariableConnection(
-  textNode: TextNode, 
-  allValidVariableIds: Set<string>
-): Promise<VariableConnectionStatus> {
   try {
-    // Check if node has bound variables for characters
-    if (!textNode.boundVariables || !textNode.boundVariables.characters) {
-      return { hasConnection: false, isGhost: false, isValid: false };
+    // Pre-check: Only process layers that actually have bound variables
+    if (!textNode.boundVariables || !textNode.boundVariables[binding]) {
+      return null; // No connection - not a ghost
     }
     
-    const boundVariable = (textNode as any).getBoundVariable('characters');
+    const boundVariable = (textNode as any).getBoundVariable(binding);
     
-    // No connection at all
+    // No bound variable reference - not a ghost
     if (!boundVariable || boundVariable.type !== 'VARIABLE_ALIAS') {
-      return { hasConnection: false, isGhost: false, isValid: false };
+      return null;
     }
     
-    // Check if the bound variable ID exists in our valid set (RELIABLE METHOD)
+    // Check if the bound variable ID exists in our valid set
     if (!allValidVariableIds.has(boundVariable.id)) {
-      // Ghost variable - binding exists but variable is deleted from all collections
+      // Ghost variable - binding exists but variable ID not in any collection
       return {
-        hasConnection: true,
-        isGhost: true,
-        isValid: false,
-        variableId: boundVariable.id,
-        errorReason: 'Variable ID not found in any collection'
+        nodeId: textNode.id,
+        nodeName: textNode.name,
+        textContent: textNode.characters,
+        bindingType: binding,
+        ghostVariableId: boundVariable.id
       };
     }
     
-    // Valid connection - variable exists in at least one collection
-    return {
-      hasConnection: true,
-      isGhost: false,
-      isValid: true,
-      variableId: boundVariable.id
-    };
+    // Variable ID exists in collections - it's a valid connection
+    return null;
     
   } catch (error) {
-    // Error accessing bound variable - likely corrupted binding
+    // getBoundVariable() threw an error - likely a ghost or corrupted binding
+    console.warn(`Error checking variable connection for node ${textNode.id}:`, error);
     return {
-      hasConnection: true,
-      isGhost: true,
-      isValid: false,
-      errorReason: `Binding access error: ${error instanceof Error ? error.message : String(error)}`
+      nodeId: textNode.id,
+      nodeName: textNode.name,
+      textContent: textNode.characters,
+      bindingType: binding,
+      ghostVariableId: 'error'
     };
   }
 }
