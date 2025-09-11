@@ -79,8 +79,8 @@ function createSimpleVariableName(text) {
     let processed = text
         .trim()
         .toLowerCase()
-        .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '')
-        .replace(/\s+/g, '_')
+        .replace(/\s+/g, '_') // Convert spaces to underscores first
+        .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '_') // Replace other invalid chars with underscores
         .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
         .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
     if (!processed) {
@@ -138,8 +138,8 @@ function sanitizeName(name) {
     return name
         .trim()
         .toLowerCase()
-        .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '')
-        .replace(/\s+/g, '_')
+        .replace(/\s+/g, '_') // Convert spaces to underscores first
+        .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '_') // Replace other invalid chars with underscores
         .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
         .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
 }
