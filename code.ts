@@ -665,17 +665,34 @@ async function scanForGhostVariables(): Promise<GhostVariable[]> {
                 ghostVariableId: boundVariable.id
               });
             }
+            // If variable exists, it's not a ghost - do nothing
           }
         } catch (error) {
-          // Only report as ghost if there was actually a binding attempt
+          // Only report as ghost if getBoundVariable failed but binding exists
+          // This indicates the variable reference is broken
           if (textNode.boundVariables && textNode.boundVariables[binding]) {
-            ghosts.push({
-              nodeId: textNode.id,
-              nodeName: textNode.name,
-              textContent: textNode.characters,
-              bindingType: binding,
-              ghostVariableId: 'unknown'
-            });
+            try {
+              const boundVariable = (textNode as any).getBoundVariable(binding);
+              if (!boundVariable) {
+                // Binding exists but getBoundVariable returns null - this is a ghost
+                ghosts.push({
+                  nodeId: textNode.id,
+                  nodeName: textNode.name,
+                  textContent: textNode.characters,
+                  bindingType: binding,
+                  ghostVariableId: 'unknown'
+                });
+              }
+            } catch (innerError) {
+              // If getBoundVariable itself throws an error, it's likely a ghost
+              ghosts.push({
+                nodeId: textNode.id,
+                nodeName: textNode.name,
+                textContent: textNode.characters,
+                bindingType: binding,
+                ghostVariableId: 'unknown'
+              });
+            }
           }
         }
       }
