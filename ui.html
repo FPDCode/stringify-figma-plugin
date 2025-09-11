@@ -1288,16 +1288,10 @@
     elements.clearGhostsButton.addEventListener('click', () => {
       if (ghostVariables.length === 0) return;
       
-      const confirmed = confirm(
-        `Are you sure you want to clear ${ghostVariables.length} ghost variable${ghostVariables.length !== 1 ? 's' : ''}?\n\nThis will remove the broken variable connections from your text layers. This action cannot be undone.`
-      );
-      
-      if (confirmed) {
-        setButtonLoading(elements.clearGhostsButton, true);
-        hideStatus();
-        const ghostIds = ghostVariables.map(ghost => ghost.nodeId);
-        sendMessage({ type: 'clear-ghost-variables', ghostIds });
-      }
+      setButtonLoading(elements.clearGhostsButton, true);
+      hideStatus();
+      const ghostIds = ghostVariables.map(ghost => ghost.nodeId);
+      sendMessage({ type: 'clear-ghost-variables', ghostIds });
     });
     
     // ============================================================================
