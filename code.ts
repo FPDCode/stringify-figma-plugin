@@ -167,11 +167,13 @@ function createSimpleVariableName(text: string): string {
 function createHierarchicalVariableName(text: string, textNode: TextNode): string {
   const parts: string[] = [];
   
-  // Get the text layer name (sanitized)
-  const textName = sanitizeName(text.trim());
+  // Use the layer name instead of text content for variable naming
+  const textName = sanitizeName(textNode.name);
   if (!textName) {
     return 'text_variable';
   }
+  
+  console.log(`Using layer name "${textNode.name}" instead of text content "${text}"`);
   
   // Find Group 1 (one level higher than text layer)
   let group1 = '';
@@ -321,8 +323,8 @@ function preprocessTextForVariable(text: string, textNode?: TextNode): TextProce
   const trimmed = text.trim();
   return {
     original: text,
-    processed: trimmed,
-    variableName: createVariableName(trimmed, textNode)
+    processed: trimmed, // Use text content for variable value
+    variableName: createVariableName(trimmed, textNode) // Use layer name for variable name
   };
 }
 
@@ -725,7 +727,7 @@ async function processTextLayer(
   // Process text layer using standard logic with hierarchical naming
   const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters, textLayer);
   
-  console.log(`Creating variable for "${textLayer.name}": "${textContent}" → "${variableName}"`);
+  console.log(`Creating variable for layer "${textLayer.name}" (text: "${textContent}") → "${variableName}"`);
   
   if (!textContent) {
     stats.skipped++;
