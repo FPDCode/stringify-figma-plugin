@@ -185,13 +185,22 @@ function createHierarchicalVariableName(text: string, textNode: TextNode): strin
   let group2 = 'root';
   let currentParent = parent;
   
+  console.log(`Finding Group 2 for "${textNode.name}":`);
+  
   // Traverse up to find the root component
   while (currentParent && currentParent.type !== 'PAGE') {
+    console.log(`  Checking parent: "${currentParent.name}" (type: ${currentParent.type})`);
+    
     if (currentParent.type === 'COMPONENT' || currentParent.type === 'COMPONENT_SET') {
       group2 = sanitizeName(currentParent.name);
+      console.log(`  Found root component: "${currentParent.name}" → "${group2}"`);
       break;
     }
     currentParent = currentParent.parent;
+  }
+  
+  if (group2 === 'root') {
+    console.log(`  No component found, using "root"`);
   }
   
   // Build the hierarchical name: Group 2 / Group 1 / Name
@@ -205,7 +214,10 @@ function createHierarchicalVariableName(text: string, textNode: TextNode): strin
   
   parts.push(textName);
   
-  return parts.join('/');
+  const finalName = parts.join('/');
+  console.log(`  Final hierarchical name: "${finalName}" (parts: [${parts.join(', ')}])`);
+  
+  return finalName;
 }
 
 function sanitizeName(name: string): string {
