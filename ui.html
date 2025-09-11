@@ -1228,7 +1228,13 @@
     
     // Tab navigation event listeners
     elements.stringifyTabButton.addEventListener('click', () => {
-      switchTab('stringify');
+      if (activeTab === 'stringify') {
+        // If already on stringify tab, force refresh
+        console.log('Already on Stringify tab - forcing refresh...');
+        refreshStringifyData();
+      } else {
+        switchTab('stringify');
+      }
     });
     
     elements.ghostbusterTabButton.addEventListener('click', () => {
