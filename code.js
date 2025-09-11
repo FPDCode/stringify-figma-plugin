@@ -444,11 +444,24 @@ async function scanForGhostVariables() {
                         continue;
                     }
                     const boundVariable = textNode.getBoundVariable(binding);
-                    if (boundVariable) {
+                    if (boundVariable && boundVariable.id) {
                         // Try to get the variable to see if it still exists
-                        const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
-                        if (!variable) {
-                            // This is a ghost variable - the binding exists but the variable doesn't
+                        try {
+                            const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
+                            if (!variable) {
+                                // This is a ghost variable - the binding exists but the variable doesn't
+                                ghosts.push({
+                                    nodeId: textNode.id,
+                                    nodeName: textNode.name,
+                                    textContent: textNode.characters,
+                                    bindingType: binding,
+                                    ghostVariableId: boundVariable.id
+                                });
+                            }
+                            // If variable exists, it's NOT a ghost - do nothing
+                        }
+                        catch (variableError) {
+                            // If we can't get the variable, it's likely a ghost
                             ghosts.push({
                                 nodeId: textNode.id,
                                 nodeName: textNode.name,
@@ -457,36 +470,29 @@ async function scanForGhostVariables() {
                                 ghostVariableId: boundVariable.id
                             });
                         }
-                        // If variable exists, it's not a ghost - do nothing
+                    }
+                    else if (textNode.boundVariables && textNode.boundVariables[binding]) {
+                        // getBoundVariable returned null/undefined but boundVariables shows a binding exists
+                        // This indicates a corrupted binding
+                        ghosts.push({
+                            nodeId: textNode.id,
+                            nodeName: textNode.name,
+                            textContent: textNode.characters,
+                            bindingType: binding,
+                            ghostVariableId: 'corrupted'
+                        });
                     }
                 }
                 catch (error) {
-                    // Only report as ghost if getBoundVariable failed but binding exists
-                    // This indicates the variable reference is broken
+                    // Only report as ghost if there was actually a binding attempt
                     if (textNode.boundVariables && textNode.boundVariables[binding]) {
-                        try {
-                            const boundVariable = textNode.getBoundVariable(binding);
-                            if (!boundVariable) {
-                                // Binding exists but getBoundVariable returns null - this is a ghost
-                                ghosts.push({
-                                    nodeId: textNode.id,
-                                    nodeName: textNode.name,
-                                    textContent: textNode.characters,
-                                    bindingType: binding,
-                                    ghostVariableId: 'unknown'
-                                });
-                            }
-                        }
-                        catch (innerError) {
-                            // If getBoundVariable itself throws an error, it's likely a ghost
-                            ghosts.push({
-                                nodeId: textNode.id,
-                                nodeName: textNode.name,
-                                textContent: textNode.characters,
-                                bindingType: binding,
-                                ghostVariableId: 'unknown'
-                            });
-                        }
+                        ghosts.push({
+                            nodeId: textNode.id,
+                            nodeName: textNode.name,
+                            textContent: textNode.characters,
+                            bindingType: binding,
+                            ghostVariableId: 'unknown'
+                        });
                     }
                 }
             }
