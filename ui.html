@@ -1061,7 +1061,7 @@
         case 'collection-selected':
           // Show process button when collection is selected
           elements.processButton.classList.remove('hidden');
-          elements.textCounterLabel.textContent = 'Text layers ready';
+          elements.textCounterLabel.textContent = 'Text layers suitable for variables';
           break;
           
         case 'processing':
@@ -1350,7 +1350,7 @@
           
           // Clear loading state (scan button removed)
           
-          updateTextCounter(msg.validCount, 'Text layers ready');
+          updateTextCounter(msg.validCount, 'Text layers suitable for variables');
           updateDynamicButton(); // Update button based on scan results
           
           // Also scan for ghost variables to keep Ghostbuster tab in sync
@@ -1451,7 +1451,7 @@
           window.selectionUpdateTimeout = setTimeout(() => {
             updateScanPreview(msg.scope);
             // Update text counter based on selection scope
-            updateTextCounter(msg.scope.textLayerCount, 'Text layers ready');
+            updateTextCounter(msg.scope.textLayerCount, 'Text layers suitable for variables');
             updateDynamicButton();
             
             // Also scan for ghost variables to keep Ghostbuster tab in sync
