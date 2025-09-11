@@ -26,21 +26,10 @@ const ERROR_CODES = {
     COLLECTION_NOT_FOUND: 'COLLECTION_NOT_FOUND',
     INVALID_TEXT: 'INVALID_TEXT',
     VARIABLE_CREATION_FAILED: 'VARIABLE_CREATION_FAILED',
-    BINDING_FAILED: 'BINDING_FAILED',
-    NO_VALID_LAYERS: 'NO_VALID_LAYERS',
-    PROCESSING_IN_PROGRESS: 'PROCESSING_IN_PROGRESS',
-    COLLECTION_ID_REQUIRED: 'COLLECTION_ID_REQUIRED'
+    BINDING_FAILED: 'BINDING_FAILED'
 };
 const UI_MESSAGES = {
-    SCANNING: 'Scanning text layers...',
-    PROCESSING: 'Creating variables...',
-    COMPLETED: 'Processing completed successfully',
-    NO_COLLECTIONS: 'No variable collections found',
-    NO_LAYERS: 'No valid text layers found',
-    SELECT_COLLECTION: 'Please select a collection first',
-    PROCESSING_IN_PROGRESS: 'Processing is already in progress',
-    COLLECTION_CREATED: 'Collection created successfully',
-    VARIABLES_CREATED: 'Variables created successfully'
+    COLLECTION_CREATED: 'Collection created successfully'
 };
 const VARIABLE_NAME_PATTERNS = {
     SAFE_CHARS: /[A-Za-z0-9_]/,
@@ -95,7 +84,6 @@ function createHierarchicalVariableName(text, textNode) {
     if (!textName) {
         return 'text_variable';
     }
-    console.log(`Using layer name "${textNode.name}" instead of text content "${text}"`);
     // Find Group 1 (one level higher than text layer)
     let group1 = '';
     const parent = textNode.parent;
@@ -105,19 +93,13 @@ function createHierarchicalVariableName(text, textNode) {
     // Find Group 2 (root component or "root")
     let group2 = 'root';
     let currentParent = parent;
-    console.log(`Finding Group 2 for "${textNode.name}":`);
     // Traverse up to find the root component
     while (currentParent && currentParent.type !== 'PAGE') {
-        console.log(`  Checking parent: "${currentParent.name}" (type: ${currentParent.type})`);
         if (currentParent.type === 'COMPONENT' || currentParent.type === 'COMPONENT_SET') {
             group2 = sanitizeName(currentParent.name);
-            console.log(`  Found root component: "${currentParent.name}" → "${group2}"`);
             break;
         }
         currentParent = currentParent.parent;
-    }
-    if (group2 === 'root') {
-        console.log(`  No component found, using "root"`);
     }
     // Build the hierarchical name: Group 2 / Group 1 / Name
     if (group2 && group2 !== 'root') {
@@ -130,11 +112,9 @@ function createHierarchicalVariableName(text, textNode) {
     const textSuffix = sanitizeName(text);
     if (textSuffix && textSuffix !== textName) {
         textName = `${textName}_${textSuffix}`;
-        console.log(`  Added text suffix: "${textName}" (from text: "${text}")`);
     }
     parts.push(textName);
     const finalName = parts.join('/');
-    console.log(`  Final hierarchical name: "${finalName}" (parts: [${parts.join(', ')}])`);
     return finalName;
 }
 function sanitizeName(name) {
@@ -164,24 +144,20 @@ function validateTextLayer(node) {
     try {
         // Skip layers already bound to variables
         if ((_a = node.boundVariables) === null || _a === void 0 ? void 0 : _a.characters) {
-            console.log(`Skipping ${node.name}: already bound to variable`);
             return false;
         }
         // Skip locked layers
         if (node.locked) {
-            console.log(`Skipping ${node.name}: layer is locked`);
             return false;
         }
         // Skip hidden layers - check both visible property and parent visibility
         if (!node.visible) {
-            console.log(`Skipping ${node.name}: layer is hidden (visible: ${node.visible})`);
             return false;
         }
         // Additional check: if parent is hidden, this layer should also be considered hidden
         let parent = node.parent;
         while (parent && parent.type !== 'PAGE') {
             if ('visible' in parent && !parent.visible) {
-                console.log(`Skipping ${node.name}: parent layer "${parent.name}" is hidden`);
                 return false;
             }
             parent = parent.parent;
@@ -189,10 +165,8 @@ function validateTextLayer(node) {
         // Check if text content is valid for variable creation
         const isValidText = isValidTextForVariable(node.characters);
         if (!isValidText) {
-            console.log(`Skipping ${node.name}: invalid text content`);
             return false;
         }
-        console.log(`Including ${node.name}: valid text layer`);
         return true;
     }
     catch (error) {
@@ -203,9 +177,7 @@ function validateTextLayer(node) {
 function getValidTextLayers() {
     try {
         const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT");
-        console.log(`Found ${allTextNodes.length} total text layers on page`);
         const validTextNodes = allTextNodes.filter(validateTextLayer);
-        console.log(`Validation complete: ${validTextNodes.length} valid layers out of ${allTextNodes.length} total`);
         return {
             layers: validTextNodes,
             validCount: validTextNodes.length,
@@ -381,11 +353,9 @@ async function scanForGhostVariables() {
             return true;
         });
         const ghosts = [];
-        console.log(`Scanning ${visibleTextNodes.length} visible text nodes for ghost variables (${allTextNodes.length} total)...`);
         for (const textNode of visibleTextNodes) {
             // Apply the same validation logic as Stringify
             if (!isValidTextForVariable(textNode.characters)) {
-                console.log(`Skipping ${textNode.name}: invalid text content for variable creation`);
                 continue;
             }
             const bindings = ['characters'];
@@ -393,7 +363,6 @@ async function scanForGhostVariables() {
                 try {
                     // Pre-check: Only process layers that actually have bound variables
                     if (!textNode.boundVariables || !textNode.boundVariables[binding]) {
-                        console.log(`Skipping ${textNode.name}: no ${binding} binding`);
                         continue;
                     }
                     const boundVariable = textNode.getBoundVariable(binding);
@@ -409,17 +378,12 @@ async function scanForGhostVariables() {
                                 bindingType: binding,
                                 ghostVariableId: boundVariable.id
                             });
-                            console.log(`Found ghost variable in ${textNode.name} (${binding}): ${boundVariable.id}`);
-                        }
-                        else {
-                            console.log(`Valid variable binding in ${textNode.name} (${binding}): ${boundVariable.id}`);
                         }
                     }
                 }
                 catch (error) {
                     // Only report as ghost if there was actually a binding attempt
                     if (textNode.boundVariables && textNode.boundVariables[binding]) {
-                        console.warn(`Potential ghost variable in ${textNode.name} (${binding}):`, error);
                         ghosts.push({
                             nodeId: textNode.id,
                             nodeName: textNode.name,
@@ -431,7 +395,6 @@ async function scanForGhostVariables() {
                 }
             }
         }
-        console.log(`Found ${ghosts.length} ghost variables`);
         return ghosts;
     }
     catch (error) {
@@ -446,7 +409,6 @@ async function clearGhostVariables(ghostIds) {
         failed: 0,
         errors: []
     };
-    console.log(`Clearing ${ghostIds.length} ghost variables...`);
     for (const nodeId of ghostIds) {
         try {
             const node = await figma.getNodeByIdAsync(nodeId);
@@ -472,7 +434,6 @@ async function clearGhostVariables(ghostIds) {
                             // Clear the ghost binding
                             node.setBoundVariable(binding, null);
                             clearedAny = true;
-                            console.log(`Cleared ghost binding ${binding} from ${node.name}`);
                         }
                     }
                 }
@@ -480,7 +441,6 @@ async function clearGhostVariables(ghostIds) {
                     // Binding exists but variable is inaccessible - clear it
                     node.setBoundVariable(binding, null);
                     clearedAny = true;
-                    console.log(`Cleared inaccessible binding ${binding} from ${node.name}`);
                 }
             }
             if (clearedAny) {
@@ -507,7 +467,6 @@ async function clearGhostVariables(ghostIds) {
             console.error(`Failed to clear ghost variable ${nodeId}:`, error);
         }
     }
-    console.log(`Ghost clearing complete: ${result.successfullyCleared} cleared, ${result.failed} failed`);
     return result;
 }
 // ============================================================================
@@ -544,7 +503,7 @@ async function handleMessage(msg) {
             await handleScanTextLayers(msg.selectedCollectionId);
             break;
         case 'create-variables':
-            await handleCreateVariables(msg.collectionId, msg.options);
+            await handleCreateVariables(msg.collectionId);
             break;
         case 'create-default-collection':
             await handleCreateDefaultCollection();
@@ -611,9 +570,7 @@ async function handleScanTextLayers(selectedCollectionId) {
         throw new PluginError(`Failed to scan text layers: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function handleCreateVariables(collectionId, options) {
-    // options parameter reserved for future extensibility
+async function handleCreateVariables(collectionId) {
     if (!collectionId) {
         throw new PluginError('Collection ID is required');
     }
@@ -763,7 +720,6 @@ async function processTextLayer(textLayer, existingVariables, variableCache, col
     }
     // Process text layer using standard logic with hierarchical naming
     const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters, textLayer);
-    console.log(`Creating variable for layer "${textLayer.name}" (text: "${textContent}") → "${variableName}"`);
     if (!textContent) {
         stats.skipped++;
         return;
