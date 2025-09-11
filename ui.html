@@ -384,6 +384,42 @@
       border-top-color: #ffffff;
     }
     
+    /* Enhanced Scanning - Scan Preview Styles */
+    .scan-preview {
+      margin-bottom: 12px;
+      padding: 8px 12px;
+      background: var(--figma-color-bg-secondary, #f8f9fa);
+      border-radius: 4px;
+      border: 1px solid var(--figma-color-border, #e5e7eb);
+      font-size: 11px;
+    }
+    
+    .scan-scope-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .scope-icon {
+      font-size: 14px;
+    }
+    
+    .scope-text {
+      flex: 1;
+      color: var(--figma-color-text, #374151);
+      font-weight: 500;
+    }
+    
+    .text-count {
+      color: var(--figma-color-text-secondary, #6b7280);
+      font-weight: 400;
+    }
+    
+    /* Selection-specific styling */
+    .scan-scope-indicator[data-scope="selection"] .scope-text {
+      color: var(--figma-color-text-brand, #007AFF);
+    }
+    
     @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
@@ -708,16 +744,13 @@
 
     <!-- Action Buttons -->
     <section class="button-container">
-      <button 
-        class="button button-scan" 
-        id="scanButton"
-        aria-describedby="scan-description"
-        aria-label="Scan text layers"
-      >
-        🔍 Rescan
-      </button>
-      <div id="scan-description" class="sr-only">
-        Scan the current page for text layers that can be converted to variables
+      <!-- Enhanced Scanning - Scan Preview -->
+      <div class="scan-preview" id="scanPreview" style="display: none;">
+        <div class="scan-scope-indicator">
+          <span class="scope-icon">📄</span>
+          <span class="scope-text">Ready to scan entire page</span>
+          <span class="text-count">0 text layers</span>
+        </div>
       </div>
       
       <button 
@@ -799,7 +832,6 @@
     let scanResults = null;
     let collections = [];
     let isProcessing = false;
-    let processingTimeout = null;
     
     // Tab and Ghostbuster state
     let activeTab = 'stringify';
@@ -816,7 +848,7 @@
       progressContainer: document.getElementById('progressContainer'),
       progressFill: document.getElementById('progressFill'),
       progressText: document.getElementById('progressText'),
-      scanButton: document.getElementById('scanButton'),
+      scanPreview: document.getElementById('scanPreview'),
       processButton: document.getElementById('processButton'),
       cancelButton: document.getElementById('cancelButton'),
       createButton: document.getElementById('createButton'),
@@ -887,9 +919,6 @@
       console.log('Refreshing Stringify data...');
       console.log('Current selectedCollection:', selectedCollection);
       
-      // Show loading state
-      setButtonLoading(elements.scanButton, true);
-      
       // Refresh collections and text layers
       console.log('Sending get-collections message...');
       sendMessage({ type: 'get-collections' });
@@ -899,6 +928,31 @@
         type: 'scan-text-layers',
         selectedCollectionId: selectedCollection
       });
+    }
+    
+    function updateScanPreview(scope) {
+      if (!elements.scanPreview) return;
+      
+      const scopeIndicator = elements.scanPreview.querySelector('.scan-scope-indicator');
+      const scopeIcon = scopeIndicator.querySelector('.scope-icon');
+      const scopeText = scopeIndicator.querySelector('.scope-text');
+      const textCount = scopeIndicator.querySelector('.text-count');
+      
+      if (scope.hasSelection) {
+        scopeIcon.textContent = '🎯';
+        scopeText.textContent = scope.scopeDescription;
+        textCount.textContent = `${scope.textLayerCount} text layers`;
+        scopeIndicator.setAttribute('data-scope', 'selection');
+        elements.scanPreview.style.display = 'block';
+      } else {
+        scopeIcon.textContent = '📄';
+        scopeText.textContent = scope.scopeDescription;
+        textCount.textContent = `${scope.textLayerCount} text layers`;
+        scopeIndicator.removeAttribute('data-scope');
+        elements.scanPreview.style.display = 'block';
+      }
+      
+      // Scan preview now shows the scope information
     }
     
     function updateGhostbusterUI() {
@@ -969,10 +1023,6 @@
     
     function updateUI() {
       // Clear any existing timeouts
-      if (processingTimeout) {
-        clearTimeout(processingTimeout);
-        processingTimeout = null;
-      }
       
       // Reset button states
       Object.values(elements).forEach(el => {
@@ -987,7 +1037,6 @@
       elements.collectionSelect.style.opacity = '1';
       
       // Hide all dynamic elements
-      elements.scanButton.classList.add('hidden');
       elements.processButton.classList.add('hidden');
       elements.cancelButton.classList.add('hidden');
       elements.createButton.classList.add('hidden');
@@ -996,14 +1045,12 @@
       // Show appropriate elements based on state
       switch (currentState) {
         case 'startup':
-          elements.scanButton.classList.remove('hidden');
           // Show create button when no collection is selected
           elements.createButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Text layers scanned';
           break;
           
         case 'collection-selected':
-          elements.scanButton.classList.remove('hidden');
           // Show process button when collection is selected
           elements.processButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Text layers ready';
@@ -1023,7 +1070,6 @@
           break;
           
         case 'completed':
-          elements.scanButton.classList.remove('hidden');
           // Show process button after completion
           elements.processButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Processing completed';
@@ -1031,7 +1077,6 @@
           break;
           
         case 'error':
-          elements.scanButton.classList.remove('hidden');
           // Show create button on error
           elements.createButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Ready to scan';
@@ -1154,8 +1199,7 @@
       showStatus(userMessage, 'error');
       setState('error');
       
-      // Clear loading states
-      setButtonLoading(elements.scanButton, false);
+      // Clear loading states (scan button removed)
     }
     
     function setButtonLoading(button, loading) {
@@ -1185,14 +1229,7 @@
       }
     });
     
-    elements.scanButton.addEventListener('click', () => {
-      setButtonLoading(elements.scanButton, true);
-      hideStatus();
-      sendMessage({ 
-        type: 'scan-text-layers',
-        selectedCollectionId: selectedCollection
-      });
-    });
+    // Scan button removed - scanning is now automatic via selection listener
     
     elements.processButton.addEventListener('click', () => {
       if (!selectedCollection) {
@@ -1309,8 +1346,7 @@
           textLayers = msg.layers;
           scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
           
-          // Clear loading state
-          setButtonLoading(elements.scanButton, false);
+          // Clear loading state (scan button removed)
           
           updateTextCounter(msg.validCount, 'Text layers ready');
           updateDynamicButton(); // Update button based on scan results
@@ -1318,7 +1354,9 @@
           if (msg.validCount === 0) {
             const message = msg.totalCount > 0 
               ? `Found ${msg.totalCount} text layers, but none are suitable for variables (may be hidden, locked, or already bound to variables).`
-              : 'No text layers found on the current page.';
+              : msg.scopeType === 'selection'
+                ? 'No suitable text layers selected for processing.'
+                : 'No suitable text layers found on the current page.';
             showStatus(message, 'warning');
             setState('startup');
           } else {
@@ -1370,8 +1408,7 @@
           setState('startup');
           showStatus(msg.message, 'warning', 5000);
           
-          // Clear loading state
-          setButtonLoading(elements.scanButton, false);
+          // Clear loading state (scan button removed)
           break;
           
         case 'error':
@@ -1399,6 +1436,23 @@
           
         case 'ghost-scan-error':
           handleError(msg.error);
+          break;
+          
+        case 'selection-changed':
+          // Debounce UI updates for better performance
+          if (window.selectionUpdateTimeout) {
+            clearTimeout(window.selectionUpdateTimeout);
+          }
+          window.selectionUpdateTimeout = setTimeout(() => {
+            updateScanPreview(msg.scope);
+            // Update text counter based on selection scope
+            updateTextCounter(msg.scope.textLayerCount, 'Text layers ready');
+            updateDynamicButton();
+          }, 16); // ~60fps update rate
+          break;
+          
+        case 'scan-scope-detected':
+          updateScanPreview(msg.scope);
           break;
           
         default:

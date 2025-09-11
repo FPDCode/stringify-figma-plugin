@@ -56,6 +56,21 @@ interface TextProcessingResult {
   variableName: string;
 }
 
+// Enhanced Scanning Interfaces
+interface ScanScope {
+  type: 'selection' | 'page';
+  targetNodes: SceneNode[];
+  textNodeCount: number;
+  description: string;
+}
+
+interface ScanPreview {
+  scopeDescription: string;
+  textLayerCount: number;
+  selectionSummary?: string;
+  hasSelection: boolean;
+}
+
 interface VariableCacheEntry {
   variable: Variable;
   name: string;
@@ -86,14 +101,16 @@ type MessageFromUI =
 type MessageToUI = 
   | { type: 'collections-loaded'; collections: CollectionInfo[] }
   | { type: 'collection-created'; collectionId: string; collections: CollectionInfo[] }
-  | { type: 'text-layers-found'; layers: TextLayerInfo[]; validCount: number; totalCount: number }
+  | { type: 'text-layers-found'; layers: TextLayerInfo[]; validCount: number; totalCount: number; scopeType: 'selection' | 'page' }
   | { type: 'progress-update'; progress: number; remaining: number }
   | { type: 'variables-created'; result: ProcessingResult }
   | { type: 'collection-invalid'; message: string }
   | { type: 'error'; message: string }
   | { type: 'ghost-variables-found'; ghosts: GhostVariable[]; count: number }
   | { type: 'ghost-clear-complete'; result: ClearResult }
-  | { type: 'ghost-scan-error'; error: string };
+  | { type: 'ghost-scan-error'; error: string }
+  | { type: 'selection-changed'; scope: ScanPreview }
+  | { type: 'scan-scope-detected'; scope: ScanScope };
 
 // ============================================================================
 // CONSTANTS
@@ -297,24 +314,114 @@ function validateTextLayer(node: TextNode): boolean {
   }
 }
 
-function getValidTextLayers(): { 
-  layers: TextNode[], 
-  validCount: number, 
-  totalCount: number 
-} {
-  try {
+// ============================================================================
+// ENHANCED SCANNING - SELECTION DETECTION
+// ============================================================================
+
+function determineScanScope(): ScanScope {
+  const selection = figma.currentPage.selection;
+  
+  if (selection.length === 0) {
+    // For page scanning, we need to count all valid text nodes on the page
     const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
     const validTextNodes = allTextNodes.filter(validateTextLayer);
     
     return {
-      layers: validTextNodes,
-      validCount: validTextNodes.length,
-      totalCount: allTextNodes.length
+      type: 'page',
+      targetNodes: [figma.currentPage as any], // PageNode is not SceneNode, but we need it for scanning
+      textNodeCount: validTextNodes.length,
+      description: 'Scanning entire page'
     };
-  } catch (error) {
-    console.error('Error scanning text layers:', error);
-    throw new PluginError('Failed to scan text layers');
   }
+  
+  // Expand selection to include meaningful containers
+  const expandedNodes = expandSelection(selection);
+  const textNodeCount = countTextNodesInSelection(expandedNodes);
+  
+  return {
+    type: 'selection',
+    targetNodes: expandedNodes,
+    textNodeCount: textNodeCount,
+    description: `Scanning ${selection.length} selected ${selection.length === 1 ? 'item' : 'items'}`
+  };
+}
+
+function expandSelection(selection: readonly SceneNode[]): SceneNode[] {
+  const expanded: SceneNode[] = [];
+  
+  selection.forEach(node => {
+    expanded.push(node);
+    
+    // Only expand meaningful containers to avoid including too many nodes
+    if (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET' || 
+        node.type === 'FRAME' || node.type === 'GROUP') {
+      if ('children' in node) {
+        expanded.push(...node.children);
+      }
+    }
+  });
+  
+  return expanded;
+}
+
+function countTextNodesInSelection(nodes: readonly SceneNode[]): number {
+  // Performance optimization: limit depth to prevent infinite recursion
+  const maxDepth = 10;
+  let currentDepth = 0;
+  
+  function countRecursive(nodeList: readonly SceneNode[]): number {
+    if (currentDepth >= maxDepth) return 0;
+    
+    let localCount = 0;
+    currentDepth++;
+    
+    for (const node of nodeList) {
+      if (node.type === 'TEXT' && validateTextLayer(node as TextNode)) {
+        localCount++;
+      } else if ('children' in node && node.children.length > 0) {
+        localCount += countRecursive(node.children);
+      }
+    }
+    
+    currentDepth--;
+    return localCount;
+  }
+  
+  return countRecursive(nodes);
+}
+
+function findTextNodesInScope(scope: ScanScope): TextNode[] {
+  if (scope.type === 'selection') {
+    return findTextNodesInSelection(scope.targetNodes);
+  } else {
+    return figma.currentPage.findAll(node => 
+      node.type === "TEXT" && validateTextLayer(node)
+    ) as TextNode[];
+  }
+}
+
+function findTextNodesInSelection(nodes: readonly SceneNode[]): TextNode[] {
+  const textNodes: TextNode[] = [];
+  
+  nodes.forEach(node => {
+    if (node.type === 'TEXT' && validateTextLayer(node)) {
+      textNodes.push(node);
+    } else if ('children' in node) {
+      textNodes.push(...findTextNodesInSelection(node.children));
+    }
+  });
+  
+  return textNodes;
+}
+
+function createScanPreview(scope: ScanScope): ScanPreview {
+  return {
+    scopeDescription: scope.description,
+    textLayerCount: scope.textNodeCount,
+    selectionSummary: scope.type === 'selection' ? 
+      `${scope.targetNodes.length} selected items` : undefined,
+    hasSelection: scope.type === 'selection'
+  };
 }
 
 function preprocessTextForVariable(text: string, textNode?: TextNode): TextProcessingResult {
@@ -507,7 +614,11 @@ function getFromVariableCache(
 
 async function scanForGhostVariables(): Promise<GhostVariable[]> {
   try {
-    const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT") as TextNode[];
+    // Enhanced Scanning - Use selection-aware logic for ghost detection
+    const scope = determineScanScope();
+    const allTextNodes = findTextNodesInScope(scope);
+    
+    // Filter for visible text nodes (additional validation)
     const visibleTextNodes = allTextNodes.filter(node => {
       // Check if node is visible and not hidden
       if (!node.visible) return false;
@@ -658,7 +769,6 @@ async function clearGhostVariables(ghostIds: string[]): Promise<ClearResult> {
 
 // Plugin state management
 let isProcessing = false;
-let currentOperation: string | null = null;
 
 // ============================================================================
 // MAIN PLUGIN LOGIC
@@ -667,16 +777,70 @@ let currentOperation: string | null = null;
 // Show the UI
 figma.showUI(__html__, PLUGIN_CONFIG.UI_DIMENSIONS);
 
+// Enhanced Scanning - Optimized Selection Change Handler
+let selectionChangeTimeout: number | null = null;
+let lastSelectionHash = '';
+
+figma.on('selectionchange', () => {
+  // Debounce selection changes for better performance
+  if (selectionChangeTimeout) {
+    clearTimeout(selectionChangeTimeout);
+  }
+  
+  selectionChangeTimeout = setTimeout(() => {
+    try {
+      // Create a simple hash of the selection to avoid unnecessary updates
+      const currentSelection = figma.currentPage.selection;
+      const selectionHash = currentSelection.map(node => node.id).join(',');
+      
+      // Only update if selection actually changed
+      if (selectionHash !== lastSelectionHash) {
+        lastSelectionHash = selectionHash;
+        
+        const scope = determineScanScope();
+        const preview = createScanPreview(scope);
+        
+        // Only send update if UI is ready and not processing
+        if (!isProcessing) {
+          figma.ui.postMessage({
+            type: 'selection-changed',
+            scope: preview
+          });
+          
+          // Also trigger a text layer scan to update the main counter
+          try {
+            const textLayers = findTextNodesInScope(scope);
+            const layers: TextLayerInfo[] = textLayers.map((layer: TextNode) => ({
+              id: layer.id,
+              name: layer.name,
+              characters: layer.characters,
+              node: layer
+            }));
+            
+            figma.ui.postMessage({
+              type: 'text-layers-found',
+              layers: layers,
+              validCount: layers.length,
+              totalCount: scope.textNodeCount
+            });
+          } catch (error) {
+            console.warn('Error scanning text layers for selection change:', error);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Error handling selection change:', error);
+    }
+  }, 50); // 50ms debounce for smooth performance
+});
+
 // Enhanced message handling with comprehensive error handling
 figma.ui.onmessage = async (msg: MessageFromUI) => {
   try {
-    currentOperation = msg.type;
     await handleMessage(msg);
   } catch (error) {
     console.error(`Error handling message ${msg.type}:`, error);
     handlePluginError(error);
-  } finally {
-    currentOperation = null;
   }
 };
 
@@ -737,23 +901,38 @@ async function handleScanTextLayers(selectedCollectionId?: string): Promise<void
       }
     }
     
-    const result = getValidTextLayers();
+    // Enhanced Scanning - Use selection-aware logic
+    const scope = determineScanScope();
+    const textNodes = findTextNodesInScope(scope);
+    
+    // Send scope information to UI
+    sendMessage({
+      type: 'scan-scope-detected',
+      scope: scope
+    });
+    
+    // Convert to layer info format
+    const layers: TextLayerInfo[] = textNodes.map((layer: TextNode) => ({
+      id: layer.id,
+      name: layer.name,
+      characters: layer.characters,
+      node: layer
+    }));
     
     sendMessage({
       type: 'text-layers-found',
-      layers: result.layers.map((layer: TextNode) => ({
-        id: layer.id,
-        name: layer.name,
-        characters: layer.characters
-      })),
-      validCount: result.validCount,
-      totalCount: result.totalCount
+      layers: layers,
+      validCount: layers.length,
+      totalCount: scope.textNodeCount,
+      scopeType: scope.type
     });
     
-    if (result.validCount === 0) {
-      const message = result.totalCount > 0 
-        ? `Found ${result.totalCount} text layers, but none are suitable for variable creation (may be hidden, locked, or already bound to variables).`
-        : 'No text layers found on the current page.';
+    if (layers.length === 0) {
+      const message = scope.textNodeCount > 0 
+        ? `Found ${scope.textNodeCount} text layers, but none are suitable for variable creation (may be hidden, locked, or already bound to variables).`
+        : scope.type === 'selection' 
+          ? 'No suitable text layers selected for processing.'
+          : 'No suitable text layers found on the current page.';
       
       figma.notify(message, { timeout: 3000 });
     }
@@ -774,7 +953,9 @@ async function handleCreateVariables(collectionId: string): Promise<void> {
   isProcessing = true;
   
   try {
-    const { layers: textLayers } = getValidTextLayers();
+    // Enhanced Scanning - Use selection-aware logic for variable creation
+    const scope = determineScanScope();
+    const textLayers = findTextNodesInScope(scope);
     
     if (textLayers.length === 0) {
       throw new PluginError('No valid text layers found for processing');
@@ -1035,12 +1216,6 @@ function sendMessage(message: MessageToUI): void {
 // Handle plugin cleanup
 figma.on('close', () => {
   isProcessing = false;
-  currentOperation = null;
 });
 
-// Handle selection changes during processing
-figma.on('selectionchange', () => {
-  if (isProcessing && currentOperation === 'create-variables') {
-    console.warn('Selection changed during processing - results may be inconsistent');
-  }
-});
+// Note: Selection changes during processing are handled by the main selection listener above
