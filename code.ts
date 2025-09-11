@@ -168,7 +168,7 @@ function createHierarchicalVariableName(text: string, textNode: TextNode): strin
   const parts: string[] = [];
   
   // Use the layer name instead of text content for variable naming
-  const textName = sanitizeName(textNode.name);
+  let textName = sanitizeName(textNode.name);
   if (!textName) {
     return 'text_variable';
   }
@@ -212,6 +212,13 @@ function createHierarchicalVariableName(text: string, textNode: TextNode): strin
   
   if (group1) {
     parts.push(group1);
+  }
+  
+  // Add suffix based on text content to make unique
+  const textSuffix = sanitizeName(text);
+  if (textSuffix && textSuffix !== textName) {
+    textName = `${textName}_${textSuffix}`;
+    console.log(`  Added text suffix: "${textName}" (from text: "${text}")`);
   }
   
   parts.push(textName);
