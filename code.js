@@ -413,9 +413,8 @@ function getFromVariableCache(cache, variableName, content) {
 // ============================================================================
 async function scanForGhostVariables() {
     try {
-        // Enhanced Scanning - Use selection-aware logic for ghost detection
-        const scope = determineScanScope();
-        const allTextNodes = findTextNodesInScope(scope);
+        // Ghostbuster should always scan the entire page, not selection-aware
+        const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT");
         // Filter for visible text nodes (additional validation)
         const visibleTextNodes = allTextNodes.filter(node => {
             // Check if node is visible and not hidden
