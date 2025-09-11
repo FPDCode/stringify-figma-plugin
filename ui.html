@@ -850,7 +850,10 @@
     }
     
     function switchTab(tabName) {
-      if (activeTab === tabName) return;
+      if (activeTab === tabName) {
+        console.log(`Tab switch: Already on ${tabName}, skipping refresh`);
+        return;
+      }
       
       console.log(`Tab switch: ${activeTab} -> ${tabName}`);
       activeTab = tabName;
@@ -858,6 +861,7 @@
       
       // Refresh data when switching to Stringify tab
       if (tabName === 'stringify') {
+        console.log('Switching to Stringify tab - triggering refresh...');
         refreshStringifyData();
       }
     }
@@ -881,15 +885,19 @@
     
     function refreshStringifyData() {
       console.log('Refreshing Stringify data...');
+      console.log('Current selectedCollection:', selectedCollection);
       
       // Show loading state
       setButtonLoading(elements.scanButton, true);
       
       // Refresh collections and text layers
+      console.log('Sending get-collections message...');
       sendMessage({ type: 'get-collections' });
+      
+      console.log('Sending scan-text-layers message with selectedCollectionId:', selectedCollection);
       sendMessage({ 
         type: 'scan-text-layers',
-        selectedCollectionId: selectedCollectionId
+        selectedCollectionId: selectedCollection
       });
     }
     
