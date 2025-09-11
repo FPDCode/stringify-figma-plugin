@@ -361,6 +361,156 @@ function getFromVariableCache(cache, variableName, content) {
     return entry ? entry.variable : null;
 }
 // ============================================================================
+// GHOST VARIABLE DETECTION FUNCTIONS
+// ============================================================================
+async function scanForGhostVariables() {
+    try {
+        const allTextNodes = figma.currentPage.findAll(node => node.type === "TEXT");
+        const visibleTextNodes = allTextNodes.filter(node => {
+            // Check if node is visible and not hidden
+            if (!node.visible)
+                return false;
+            // Check if any parent is hidden
+            let parent = node.parent;
+            while (parent && parent.type !== 'PAGE') {
+                if ('visible' in parent && !parent.visible) {
+                    return false;
+                }
+                parent = parent.parent;
+            }
+            return true;
+        });
+        const ghosts = [];
+        console.log(`Scanning ${visibleTextNodes.length} visible text nodes for ghost variables (${allTextNodes.length} total)...`);
+        for (const textNode of visibleTextNodes) {
+            // Apply the same validation logic as Stringify
+            if (!isValidTextForVariable(textNode.characters)) {
+                console.log(`Skipping ${textNode.name}: invalid text content for variable creation`);
+                continue;
+            }
+            const bindings = ['characters'];
+            for (const binding of bindings) {
+                try {
+                    // Pre-check: Only process layers that actually have bound variables
+                    if (!textNode.boundVariables || !textNode.boundVariables[binding]) {
+                        console.log(`Skipping ${textNode.name}: no ${binding} binding`);
+                        continue;
+                    }
+                    const boundVariable = textNode.getBoundVariable(binding);
+                    if (boundVariable) {
+                        // Try to get the variable to see if it still exists
+                        const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
+                        if (!variable) {
+                            // This is a ghost variable - the binding exists but the variable doesn't
+                            ghosts.push({
+                                nodeId: textNode.id,
+                                nodeName: textNode.name,
+                                textContent: textNode.characters,
+                                bindingType: binding,
+                                ghostVariableId: boundVariable.id
+                            });
+                            console.log(`Found ghost variable in ${textNode.name} (${binding}): ${boundVariable.id}`);
+                        }
+                        else {
+                            console.log(`Valid variable binding in ${textNode.name} (${binding}): ${boundVariable.id}`);
+                        }
+                    }
+                }
+                catch (error) {
+                    // Only report as ghost if there was actually a binding attempt
+                    if (textNode.boundVariables && textNode.boundVariables[binding]) {
+                        console.warn(`Potential ghost variable in ${textNode.name} (${binding}):`, error);
+                        ghosts.push({
+                            nodeId: textNode.id,
+                            nodeName: textNode.name,
+                            textContent: textNode.characters,
+                            bindingType: binding,
+                            ghostVariableId: 'unknown'
+                        });
+                    }
+                }
+            }
+        }
+        console.log(`Found ${ghosts.length} ghost variables`);
+        return ghosts;
+    }
+    catch (error) {
+        console.error('Error scanning for ghost variables:', error);
+        throw new PluginError('Failed to scan for ghost variables');
+    }
+}
+async function clearGhostVariables(ghostIds) {
+    const result = {
+        totalAttempted: ghostIds.length,
+        successfullyCleared: 0,
+        failed: 0,
+        errors: []
+    };
+    console.log(`Clearing ${ghostIds.length} ghost variables...`);
+    for (const nodeId of ghostIds) {
+        try {
+            const node = await figma.getNodeByIdAsync(nodeId);
+            if (!node) {
+                throw new Error('Node no longer exists');
+            }
+            if (node.type !== 'TEXT') {
+                throw new Error('Node is no longer a text layer');
+            }
+            if (node.removed) {
+                throw new Error('Node has been removed from the document');
+            }
+            // Find and clear all ghost bindings for this node
+            const bindings = ['characters'];
+            let clearedAny = false;
+            for (const binding of bindings) {
+                try {
+                    const boundVariable = node.getBoundVariable(binding);
+                    if (boundVariable) {
+                        // Check if this is actually a ghost (variable doesn't exist)
+                        const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
+                        if (!variable) {
+                            // Clear the ghost binding
+                            node.setBoundVariable(binding, null);
+                            clearedAny = true;
+                            console.log(`Cleared ghost binding ${binding} from ${node.name}`);
+                        }
+                    }
+                }
+                catch (error) {
+                    // Binding exists but variable is inaccessible - clear it
+                    node.setBoundVariable(binding, null);
+                    clearedAny = true;
+                    console.log(`Cleared inaccessible binding ${binding} from ${node.name}`);
+                }
+            }
+            if (clearedAny) {
+                result.successfullyCleared++;
+            }
+            else {
+                result.failed++;
+                result.errors.push({
+                    nodeId,
+                    nodeName: node.name,
+                    error: 'No ghost bindings found to clear',
+                    bindingType: 'unknown'
+                });
+            }
+        }
+        catch (error) {
+            result.failed++;
+            result.errors.push({
+                nodeId,
+                nodeName: 'unknown',
+                error: error instanceof Error ? error.message : 'Unknown error',
+                bindingType: 'unknown'
+            });
+            console.error(`Failed to clear ghost variable ${nodeId}:`, error);
+        }
+    }
+    console.log(`Ghost clearing complete: ${result.successfullyCleared} cleared, ${result.failed} failed`);
+    return result;
+}
+// ============================================================================
 // PLUGIN STATE MANAGEMENT
 // ============================================================================
 // Plugin state management
@@ -398,6 +548,15 @@ async function handleMessage(msg) {
             break;
         case 'create-default-collection':
             await handleCreateDefaultCollection();
+            break;
+        case 'scan-ghost-variables':
+            await handleScanGhostVariables();
+            break;
+        case 'clear-ghost-variables':
+            await handleClearGhostVariables(msg.ghostIds);
+            break;
+        case 'select-ghost-layer':
+            await handleSelectGhostLayer(msg.nodeId);
             break;
         default:
             throw new Error(`Unknown message type: ${msg.type}`);
@@ -492,6 +651,68 @@ async function handleCreateDefaultCollection() {
     }
     catch (error) {
         throw new PluginError(`Failed to create collection: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleScanGhostVariables() {
+    try {
+        const ghosts = await scanForGhostVariables();
+        sendMessage({
+            type: 'ghost-variables-found',
+            ghosts,
+            count: ghosts.length
+        });
+        if (ghosts.length > 0) {
+            figma.notify(`Found ${ghosts.length} ghost variable${ghosts.length !== 1 ? 's' : ''}`, { timeout: 3000 });
+        }
+    }
+    catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        sendMessage({
+            type: 'ghost-scan-error',
+            error: errorMessage
+        });
+        throw new PluginError(`Failed to scan ghost variables: ${errorMessage}`);
+    }
+}
+async function handleClearGhostVariables(ghostIds) {
+    try {
+        const result = await clearGhostVariables(ghostIds);
+        sendMessage({
+            type: 'ghost-clear-complete',
+            result
+        });
+        const message = `Cleared ${result.successfullyCleared} ghost variable${result.successfullyCleared !== 1 ? 's' : ''}`;
+        figma.notify(message, { timeout: 5000 });
+        if (result.failed > 0) {
+            figma.notify(`Warning: ${result.failed} ghost variable${result.failed !== 1 ? 's' : ''} could not be cleared`, {
+                error: true,
+                timeout: 5000
+            });
+        }
+    }
+    catch (error) {
+        throw new PluginError(`Failed to clear ghost variables: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+async function handleSelectGhostLayer(nodeId) {
+    try {
+        const node = await figma.getNodeByIdAsync(nodeId);
+        if (!node) {
+            figma.notify('Layer not found or has been deleted', { error: true, timeout: 3000 });
+            return;
+        }
+        if (node.removed) {
+            figma.notify('Layer has been removed from the document', { error: true, timeout: 3000 });
+            return;
+        }
+        // Select the node
+        figma.currentPage.selection = [node];
+        figma.viewport.scrollAndZoomIntoView([node]);
+        figma.notify(`Selected layer: ${node.name}`, { timeout: 2000 });
+    }
+    catch (error) {
+        console.error('Error selecting ghost layer:', error);
+        figma.notify('Failed to select layer', { error: true, timeout: 3000 });
     }
 }
 async function processTextLayersWithProgress(textLayers, collectionId) {
