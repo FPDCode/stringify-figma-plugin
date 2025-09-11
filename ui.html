@@ -896,6 +896,14 @@
         console.log('Switching to Stringify tab - triggering refresh...');
         refreshStringifyData();
       }
+      
+      // Auto-scan when switching to Ghostbuster tab
+      if (tabName === 'ghostbuster') {
+        console.log('Switching to Ghostbuster tab - triggering ghost scan...');
+        setButtonLoading(elements.scanGhostsButton, true);
+        hideStatus();
+        sendMessage({ type: 'scan-ghost-variables' });
+      }
     }
     
     function updateTabUI() {
