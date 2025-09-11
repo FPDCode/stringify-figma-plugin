@@ -855,6 +855,11 @@
       console.log(`Tab switch: ${activeTab} -> ${tabName}`);
       activeTab = tabName;
       updateTabUI();
+      
+      // Refresh data when switching to Stringify tab
+      if (tabName === 'stringify') {
+        refreshStringifyData();
+      }
     }
     
     function updateTabUI() {
@@ -872,6 +877,20 @@
       if (activeTab === 'ghostbuster') {
         updateGhostbusterUI();
       }
+    }
+    
+    function refreshStringifyData() {
+      console.log('Refreshing Stringify data...');
+      
+      // Show loading state
+      setButtonLoading(elements.scanButton, true);
+      
+      // Refresh collections and text layers
+      sendMessage({ type: 'get-collections' });
+      sendMessage({ 
+        type: 'scan-text-layers',
+        selectedCollectionId: selectedCollectionId
+      });
     }
     
     function updateGhostbusterUI() {
@@ -1126,6 +1145,9 @@
       const userMessage = typeof error === 'string' ? error : 'An unexpected error occurred';
       showStatus(userMessage, 'error');
       setState('error');
+      
+      // Clear loading states
+      setButtonLoading(elements.scanButton, false);
     }
     
     function setButtonLoading(button, loading) {
@@ -1273,6 +1295,9 @@
           textLayers = msg.layers;
           scanResults = { validCount: msg.validCount, totalCount: msg.totalCount };
           
+          // Clear loading state
+          setButtonLoading(elements.scanButton, false);
+          
           updateTextCounter(msg.validCount, 'Text layers ready');
           updateDynamicButton(); // Update button based on scan results
           
@@ -1330,6 +1355,9 @@
           updateDynamicButton();
           setState('startup');
           showStatus(msg.message, 'warning', 5000);
+          
+          // Clear loading state
+          setButtonLoading(elements.scanButton, false);
           break;
           
         case 'error':
