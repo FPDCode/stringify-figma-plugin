@@ -56,7 +56,7 @@
       height: 100%;
       width: 100%;
       padding: 16px;
-      gap: 12px;
+      gap: 16px;
       box-sizing: border-box;
     }
     
@@ -68,74 +68,6 @@
       width: 100%;
       margin: 0;
       padding: 0;
-    }
-    
-    /* Advanced Naming Convention Toggle Styles */
-    .naming-toggle-container {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      flex-shrink: 0;
-      width: 100%;
-      margin: 0;
-      padding: 12px 16px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid #e1e5e9;
-    }
-    
-    .naming-toggle-wrapper {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-    }
-    
-    .naming-toggle-label {
-      font-size: 13px;
-      font-weight: 500;
-      color: #333;
-      margin: 0;
-      cursor: pointer;
-      flex: 1;
-    }
-    
-    .toggle-switch {
-      width: 42px;
-      height: 24px;
-      background-color: #e1e5e9;
-      border-radius: 12px;
-      position: relative;
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      border: none;
-      outline: none;
-      flex-shrink: 0;
-    }
-    
-    .toggle-switch:focus {
-      outline: 2px solid #007AFF;
-      outline-offset: 2px;
-    }
-    
-    .toggle-switch[aria-checked="true"] {
-      background-color: #007AFF;
-    }
-    
-    .toggle-slider {
-      width: 20px;
-      height: 20px;
-      background-color: #ffffff;
-      border-radius: 50%;
-      position: absolute;
-      top: 2px;
-      left: 2px;
-      transition: transform 0.2s ease;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-    
-    .toggle-switch[aria-checked="true"] .toggle-slider {
-      transform: translateX(18px);
     }
     
     .text-counter-container {
@@ -157,7 +89,7 @@
     .button-container {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 12px;
       flex-shrink: 0;
       width: 100%;
       margin: 0;
@@ -790,18 +722,6 @@
       </select>
       <div id="collection-description" class="sr-only">
         Choose the variable collection where new string variables will be created
-      </div>
-    </section>
-
-    <!-- Advanced Naming Convention Toggle Section -->
-    <section class="naming-toggle-container" aria-labelledby="naming-toggle-heading">
-      <div class="naming-toggle-wrapper">
-        <label for="advancedNamingToggle" class="naming-toggle-label" id="naming-toggle-heading">
-          Enable Advanced naming convention
-        </label>
-        <div class="toggle-switch" role="switch" aria-checked="false" aria-labelledby="naming-toggle-heading" tabindex="0" id="advancedNamingToggle">
-          <div class="toggle-slider"></div>
-        </div>
       </div>
     </section>
 
@@ -1576,44 +1496,8 @@
       }
     }
     
-    // Advanced Naming Convention Toggle (UI only - no functionality yet)
-    function initializeAdvancedNamingToggle() {
-      const toggle = document.getElementById('advancedNamingToggle');
-      const label = document.querySelector('.naming-toggle-label');
-      
-      if (!toggle || !label) return;
-      
-      // Handle click on toggle
-      toggle.addEventListener('click', () => {
-        const isChecked = toggle.getAttribute('aria-checked') === 'true';
-        const newState = !isChecked;
-        
-        // Update toggle state
-        toggle.setAttribute('aria-checked', newState.toString());
-        
-        // Visual feedback only - no functionality yet
-        console.log(`Advanced naming convention: ${newState ? 'enabled' : 'disabled'}`);
-      });
-      
-      // Handle click on label
-      label.addEventListener('click', () => {
-        toggle.click();
-      });
-      
-      // Handle keyboard interaction
-      toggle.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          toggle.click();
-        }
-      });
-    }
-    
     // Initialize plugin
     initializePlugin();
-    
-    // Initialize the advanced naming toggle
-    initializeAdvancedNamingToggle();
     
     // Handle page visibility changes
     document.addEventListener('visibilitychange', () => {

@@ -123,7 +123,7 @@ const PLUGIN_CONFIG = {
   PROGRESS_UPDATE_DELAY: 10,
   UI_DIMENSIONS: {
     width: 380,
-    height: 640
+    height: 560
   }
 } as const;
 
