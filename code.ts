@@ -89,11 +89,6 @@ interface ScanPreview {
   hasSelection: boolean;
 }
 
-interface VariableCacheEntry {
-  variable: Variable;
-  name: string;
-  content: string;
-}
 
 class PluginError extends Error {
   public readonly code?: string;

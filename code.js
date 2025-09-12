@@ -19,7 +19,7 @@ const PLUGIN_CONFIG = {
     PROGRESS_UPDATE_DELAY: 10,
     UI_DIMENSIONS: {
         width: 380,
-        height: 560
+        height: 640
     }
 };
 const ERROR_CODES = {
@@ -33,9 +33,12 @@ const UI_MESSAGES = {
 };
 const VARIABLE_NAME_PATTERNS = {
     SAFE_CHARS: /[A-Za-z0-9_]/,
-    REPLACE_CHARS: /[^A-Za-z0-9_]/g,
+    // Figma-compatible regex: only allow basic Latin letters, numbers, underscores, spaces, and hyphens
+    // Replace everything else including Unicode symbols, accented characters, and special symbols
+    REPLACE_CHARS: /[^A-Za-z0-9\s_-]/g,
     MULTIPLE_UNDERSCORES: /_{2,}/g,
-    EDGE_UNDERSCORES: /^_+|_+$/g
+    // Only remove trailing underscores, preserve leading ones for cases like _hash_
+    EDGE_UNDERSCORES: /_+$/g
 };
 const NAMING_CONSTANTS = {
     STORAGE_KEY: 'namingConvention',
@@ -84,8 +87,9 @@ function isValidTextForVariable(text) {
     const trimmed = text.trim();
     if (!trimmed || trimmed.length === 0)
         return false;
-    const firstChar = trimmed[0];
-    return VARIABLE_NAME_PATTERNS.SAFE_CHARS.test(firstChar);
+    // More permissive validation - accept any printable character
+    // The sanitization functions will handle making it Figma-compatible
+    return trimmed.length <= 1000; // Reasonable length limit
 }
 function createVariableName(text, textNode, namingMode) {
     if (!text || text.trim().length === 0) {
@@ -105,24 +109,26 @@ function createVariableName(text, textNode, namingMode) {
     return hierarchicalName;
 }
 /**
- * Generate simple variable name according to PRD specifications
- * - Remove leading whitespace only
- * - Preserve original capitalization exactly as designed
- * - Replace spaces with underscores
- * - Keep all other characters as-is (including special characters)
+ * Generate simple variable name using hierarchical processing logic but without parent hierarchy
+ * - Uses robust sanitization from advanced mode
+ * - Preserves original capitalization (Live Activities → Live_Activities)
+ * - Applies same character handling and validation as hierarchical mode
+ * - Uses existing truncation logic for length management
  */
 function generateSimpleVariableName(textContent) {
-    // Remove leading whitespace only (preserve trailing and internal whitespace initially)
-    const trimmedContent = textContent.replace(/^\s+/, '');
-    // If empty after trimming leading whitespace, return default
-    if (!trimmedContent) {
+    // Use the robust sanitization logic from hierarchical mode but preserve case
+    let processed = sanitizeNamePreserveCase(textContent);
+    // If empty after processing, return default
+    if (!processed) {
         return 'text_variable';
     }
-    // Replace spaces with underscores, preserve case and other characters
-    let processed = trimmedContent.replace(/\s/g, '_');
-    // Ensure it starts with a valid character for Figma variables
-    if (!/^[a-zA-Z_]/.test(processed)) {
+    // Ensure it starts with a valid character for Figma variables (basic Latin letter or underscore)
+    if (!/^[A-Za-z_]/.test(processed)) {
         processed = `Var_${processed}`;
+    }
+    // Apply existing truncation logic if too long (reuse hierarchical truncation)
+    if (processed.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
+        return truncateVariableName(processed);
     }
     return processed;
 }
@@ -224,6 +230,29 @@ function sanitizeName(name) {
         .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
         .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
 }
+/**
+ * Sanitize name preserving original capitalization for simple mode
+ * Uses same robust processing as hierarchical mode but keeps case intact
+ */
+function sanitizeNamePreserveCase(name) {
+    if (!name || name.trim().length === 0) {
+        return '';
+    }
+    return name
+        .trim()
+        // Enhanced character handling for common special cases (preserve case)
+        .replace(/@/g, '_at_') // email@domain.com → email_at_domain_com
+        .replace(/#/g, '_hash_') // #hashtag → _hash_hashtag
+        .replace(/\$/g, '_dollar_') // $99 → _dollar_99
+        .replace(/%/g, '_percent_') // 50% → 50_percent_
+        .replace(/&/g, '_and_') // A & B → A_and_B
+        .replace(/\+/g, '_plus_') // A + B → A_plus_B
+        .replace(/=/g, '_equals_') // A = B → A_equals_B
+        .replace(/\s+/g, '_') // Convert spaces to underscores
+        .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '_') // Replace other invalid chars with underscores
+        .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
+        .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
+}
 function truncateVariableName(text) {
     const maxLength = PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH;
     if (text.length <= maxLength)
@@ -306,79 +335,15 @@ function determineScanScope() {
             description: 'Scanning entire page'
         };
     }
-    // Expand selection to include meaningful containers
-    const expandedNodes = expandSelection(selection);
-    const textNodeCount = countTextNodesInSelection(expandedNodes);
+    // Use selected nodes directly for simpler, more predictable behavior
+    const expandedNodes = [...selection];
+    const textNodeCount = figma.currentPage.findAll(node => node.type === "TEXT" &&
+        expandedNodes.some(selected => selected === node || ('children' in selected && selected.children.includes(node)))).filter(node => validateTextLayer(node)).length;
     return {
         type: 'selection',
         targetNodes: expandedNodes,
         textNodeCount: textNodeCount,
         description: `Scanning ${selection.length} selected ${selection.length === 1 ? 'item' : 'items'}`
-    };
-}
-function expandSelection(selection) {
-    const expanded = [];
-    selection.forEach(node => {
-        expanded.push(node);
-        // Only expand meaningful containers to avoid including too many nodes
-        if (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET' ||
-            node.type === 'FRAME' || node.type === 'GROUP') {
-            if ('children' in node) {
-                expanded.push(...node.children);
-            }
-        }
-    });
-    return expanded;
-}
-function countTextNodesInSelection(nodes) {
-    // Performance optimization: limit depth to prevent infinite recursion
-    const maxDepth = 10;
-    let currentDepth = 0;
-    function countRecursive(nodeList) {
-        if (currentDepth >= maxDepth)
-            return 0;
-        let localCount = 0;
-        currentDepth++;
-        for (const node of nodeList) {
-            if (node.type === 'TEXT' && validateTextLayer(node)) {
-                localCount++;
-            }
-            else if ('children' in node && node.children.length > 0) {
-                localCount += countRecursive(node.children);
-            }
-        }
-        currentDepth--;
-        return localCount;
-    }
-    return countRecursive(nodes);
-}
-function findTextNodesInScope(scope) {
-    if (scope.type === 'selection') {
-        return findTextNodesInSelection(scope.targetNodes);
-    }
-    else {
-        return figma.currentPage.findAll(node => node.type === "TEXT" && validateTextLayer(node));
-    }
-}
-function findTextNodesInSelection(nodes) {
-    const textNodes = [];
-    nodes.forEach(node => {
-        if (node.type === 'TEXT' && validateTextLayer(node)) {
-            textNodes.push(node);
-        }
-        else if ('children' in node) {
-            textNodes.push(...findTextNodesInSelection(node.children));
-        }
-    });
-    return textNodes;
-}
-function createScanPreview(scope) {
-    return {
-        scopeDescription: scope.description,
-        textLayerCount: scope.textNodeCount,
-        selectionSummary: scope.type === 'selection' ?
-            `${scope.targetNodes.length} selected items` : undefined,
-        hasSelection: scope.type === 'selection'
     };
 }
 function groupTextLayersByContent(textLayers, namingMode = 'simple') {
@@ -547,23 +512,6 @@ function bindTextNodeToVariable(textNode, variable) {
 function findExistingVariable(existingVariables, variableName, content) {
     const key = `${variableName}:${content}`;
     return existingVariables.get(key) || null;
-}
-function createVariableCache() {
-    return new Map();
-}
-function addToVariableCache(cache, variable, collection) {
-    const key = `${variable.name}:${variable.valuesByMode[collection.defaultModeId]}`;
-    const content = variable.valuesByMode[collection.defaultModeId];
-    cache.set(key, {
-        variable,
-        name: variable.name,
-        content: typeof content === 'string' ? content : String(content)
-    });
-}
-function getFromVariableCache(cache, variableName, content) {
-    const key = `${variableName}:${content}`;
-    const entry = cache.get(key);
-    return entry ? entry.variable : null;
 }
 // ============================================================================
 // GHOST VARIABLE DETECTION FUNCTIONS
@@ -778,7 +726,14 @@ figma.on('selectionchange', () => {
             if (selectionHash !== lastSelectionHash) {
                 lastSelectionHash = selectionHash;
                 const scope = determineScanScope();
-                const preview = createScanPreview(scope);
+                // Simplified preview without the removed function
+                const preview = {
+                    scopeDescription: scope.description,
+                    textLayerCount: scope.textNodeCount,
+                    selectionSummary: scope.type === 'selection' ?
+                        `${scope.targetNodes.length} selected items` : undefined,
+                    hasSelection: scope.type === 'selection'
+                };
                 // Only send update if UI is ready and not processing
                 if (!isProcessing) {
                     figma.ui.postMessage({
@@ -787,7 +742,10 @@ figma.on('selectionchange', () => {
                     });
                     // Also trigger a text layer scan to update the main counter
                     try {
-                        const textLayers = findTextNodesInScope(scope);
+                        const textLayers = scope.type === 'selection'
+                            ? figma.currentPage.findAll(node => node.type === "TEXT" &&
+                                scope.targetNodes.some(selected => selected === node || ('children' in selected && selected.children.includes(node)))).filter(node => validateTextLayer(node))
+                            : figma.currentPage.findAll(node => node.type === "TEXT" && validateTextLayer(node));
                         const layers = textLayers.map((layer) => ({
                             id: layer.id,
                             name: layer.name,
@@ -884,7 +842,10 @@ async function handleScanTextLayers(selectedCollectionId) {
         }
         // Enhanced Scanning - Use selection-aware logic
         const scope = determineScanScope();
-        const textNodes = findTextNodesInScope(scope);
+        const textNodes = scope.type === 'selection'
+            ? figma.currentPage.findAll(node => node.type === "TEXT" &&
+                scope.targetNodes.some(selected => selected === node || ('children' in selected && selected.children.includes(node)))).filter(node => validateTextLayer(node))
+            : figma.currentPage.findAll(node => node.type === "TEXT" && validateTextLayer(node));
         // Send scope information to UI
         sendMessage({
             type: 'scan-scope-detected',
@@ -928,7 +889,10 @@ async function handleCreateVariables(collectionId) {
     try {
         // Enhanced Scanning - Use selection-aware logic for variable creation
         const scope = determineScanScope();
-        const textLayers = findTextNodesInScope(scope);
+        const textLayers = scope.type === 'selection'
+            ? figma.currentPage.findAll(node => node.type === "TEXT" &&
+                scope.targetNodes.some(selected => selected === node || ('children' in selected && selected.children.includes(node)))).filter(node => validateTextLayer(node))
+            : figma.currentPage.findAll(node => node.type === "TEXT" && validateTextLayer(node));
         if (textLayers.length === 0) {
             throw new PluginError('No valid text layers found for processing');
         }
@@ -1081,14 +1045,14 @@ async function processTextLayersWithProgress(textLayers, collectionId) {
         'Average layers per group': groupAnalysis.averageLayersPerGroup
     });
     const existingVariables = await getExistingVariables(collectionId);
-    const variableCache = createVariableCache();
+    // Simplified: use existingVariables directly instead of separate cache
     const detailedErrors = [];
     // Process by content groups instead of individual layers
     for (let i = 0; i < contentGroups.length; i += PLUGIN_CONFIG.BATCH_SIZE) {
         const batch = contentGroups.slice(i, i + PLUGIN_CONFIG.BATCH_SIZE);
         for (const group of batch) {
             try {
-                await processContentGroup(group, existingVariables, variableCache, collectionId, stats);
+                await processContentGroup(group, existingVariables, collectionId, stats);
             }
             catch (error) {
                 console.error(`Error processing content group "${group.content}":`, error);
@@ -1122,9 +1086,9 @@ async function processTextLayersWithProgress(textLayers, collectionId) {
     const processingTime = Date.now() - startTime;
     return Object.assign(Object.assign({}, stats), { totalProcessed: stats.created + stats.connected, contentGroups: contentGroups.length, duplicateContentGroups: groupAnalysis.duplicateContent, processingTime });
 }
-async function processContentGroup(group, existingVariables, variableCache, collectionId, stats) {
+async function processContentGroup(group, existingVariables, collectionId, stats) {
     // Check if we can reuse an existing variable for this content
-    let variable = getFromVariableCache(variableCache, group.variableName, group.trimmedContent);
+    let variable = findExistingVariable(existingVariables, group.variableName, group.trimmedContent);
     if (variable) {
         // Bind all layers in this group to the cached variable
         for (const layer of group.layers) {
@@ -1155,10 +1119,9 @@ async function processContentGroup(group, existingVariables, variableCache, coll
     }
     // Create new variable for this content group
     variable = await createStringVariable(collectionId, group.variableName, group.trimmedContent);
-    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
-    if (collection) {
-        addToVariableCache(variableCache, variable, collection);
-    }
+    // Add to existingVariables for future lookups
+    const key = `${variable.name}:${group.trimmedContent}`;
+    existingVariables.set(key, variable);
     // Bind all layers in this group to the new variable
     let layersProcessed = 0;
     for (const layer of group.layers) {
