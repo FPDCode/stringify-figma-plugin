@@ -270,6 +270,13 @@ function generateSimpleVariableName(textContent: string): string {
     processed = `Var_${processed}`;
   }
   
+  // Apply length limit to prevent Figma API errors
+  if (processed.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
+    // For simple mode, truncate and add suffix to indicate truncation
+    const maxLength = PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH - 3; // Reserve 3 chars for "..."
+    processed = processed.substring(0, maxLength) + '___';
+  }
+  
   return processed;
 }
 
