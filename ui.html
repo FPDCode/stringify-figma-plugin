@@ -70,6 +70,113 @@
       padding: 0;
     }
     
+    /* ============================================================================
+       NAMING TOGGLE STYLES
+    ============================================================================ */
+    
+    .naming-toggle-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 12px 16px 8px 16px; /* Compact spacing */
+    }
+    
+    .naming-toggle-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1a1a1a;
+      margin: 0;
+    }
+    
+    .toggle-option-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+    
+    .toggle-option-container:hover {
+      background: #f1f3f4;
+      border-color: #d0d7de;
+    }
+    
+    .toggle-option-info {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+    }
+    
+    .toggle-option-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: #1a1a1a;
+      margin: 0 0 2px 0;
+    }
+    
+    .toggle-option-description {
+      font-size: 11px;
+      color: #6a737d;
+      margin: 0;
+      line-height: 1.3;
+    }
+    
+    /* Toggle Switch Styles */
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      margin-left: 12px;
+    }
+    
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #e9ecef;
+      transition: 0.3s;
+      border-radius: 24px;
+      border: 1px solid #d0d7de;
+    }
+    
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .toggle-switch input:checked + .toggle-slider {
+      background-color: #007AFF;
+      border-color: #007AFF;
+    }
+    
+    .toggle-switch input:focus + .toggle-slider {
+      box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+    }
+    
+    .toggle-switch input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+    
     .text-counter-container {
       display: flex;
       flex-direction: column;
@@ -378,97 +485,6 @@
     
     .button-cancel.loading::after {
       border-top-color: #ffffff;
-    }
-
-    /* Naming Convention Toggle Styles */
-    .naming-toggle-container {
-      margin: 16px 0;
-      padding: 12px 16px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid #e5e7eb;
-    }
-
-    .toggle-group {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-    }
-
-    .toggle-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      cursor: pointer;
-      margin: 0;
-    }
-
-    .toggle-text {
-      font-size: 14px;
-      font-weight: 500;
-      color: #374151;
-    }
-
-    .toggle-switch {
-      position: relative;
-      width: 44px;
-      height: 24px;
-    }
-
-    .toggle-input {
-      opacity: 0;
-      width: 0;
-      height: 0;
-      position: absolute;
-    }
-
-    .toggle-slider {
-      position: absolute;
-      cursor: pointer;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #d1d5db;
-      border-radius: 24px;
-      transition: background-color 0.2s ease;
-    }
-
-    .toggle-slider::before {
-      position: absolute;
-      content: "";
-      height: 20px;
-      width: 20px;
-      left: 2px;
-      bottom: 2px;
-      background-color: white;
-      border-radius: 50%;
-      transition: transform 0.2s ease;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-
-    .toggle-input:checked + .toggle-slider {
-      background-color: #007AFF;
-    }
-
-    .toggle-input:checked + .toggle-slider::before {
-      transform: translateX(20px);
-    }
-
-    .toggle-input:focus + .toggle-slider {
-      box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
-    }
-
-    .toggle-description {
-      font-size: 12px;
-      color: #6b7280;
-      line-height: 1.4;
-    }
-
-    .description-text {
-      display: block;
     }
     
     .button-create.loading::after {
@@ -816,6 +832,26 @@
       </div>
     </section>
 
+    <!-- Naming Convention Toggle -->
+    <section class="naming-toggle-container" aria-labelledby="naming-toggle-heading">
+      <h4 id="naming-toggle-heading" class="naming-toggle-label">Variable Naming</h4>
+      <div class="toggle-option-container">
+        <div class="toggle-option-info">
+          <div class="toggle-option-title">Simple Content Names</div>
+          <div class="toggle-option-description">Use text content directly (e.g., "Hello World")</div>
+        </div>
+        <label class="toggle-switch" for="namingToggle" aria-label="Toggle naming convention">
+          <input type="checkbox" id="namingToggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="toggle-option-description" style="margin-top: 4px; padding-left: 12px;">
+        <span id="namingToggleDescription">
+          When enabled: Uses hierarchical names (e.g., "info_table/title_hello_world")
+        </span>
+      </div>
+    </section>
+
     <!-- Text Counter Section -->
     <section class="text-counter-container" id="textCounterContainer" aria-live="polite">
       <div class="text-counter-number" id="textCounterNumber">0</div>
@@ -841,29 +877,6 @@
           <span class="scope-icon">📄</span>
           <span class="scope-text">Ready to scan entire page</span>
           <span class="text-count">0 text layers</span>
-        </div>
-      </div>
-      
-      <!-- Naming Convention Toggle -->
-      <div class="naming-toggle-container" id="namingToggleContainer" style="display: none;">
-        <div class="toggle-group">
-          <label class="toggle-label">
-            <span class="toggle-text">Adv. Hierarchy</span>
-            <div class="toggle-switch">
-              <input 
-                type="checkbox" 
-                id="hierarchyToggle" 
-                class="toggle-input"
-                aria-describedby="hierarchy-description"
-              />
-              <span class="toggle-slider"></span>
-            </div>
-          </label>
-        </div>
-        <div id="hierarchy-description" class="toggle-description">
-          <span class="description-text">
-            <span id="toggleDescription">Simple content-based naming (e.g., "hello_world")</span>
-          </span>
         </div>
       </div>
       
@@ -952,9 +965,6 @@
     let ghostVariables = [];
     let isScanningGhosts = false;
     
-    // Naming convention state
-    let useHierarchicalNaming = false; // Default to OFF (simple naming)
-    
     // UI Elements
     const elements = {
       // Existing elements
@@ -962,10 +972,6 @@
       textCounterNumber: document.getElementById('textCounterNumber'),
       textCounterLabel: document.getElementById('textCounterLabel'),
       textCounterContainer: document.getElementById('textCounterContainer'),
-      // Naming convention toggle elements
-      namingToggleContainer: document.getElementById('namingToggleContainer'),
-      hierarchyToggle: document.getElementById('hierarchyToggle'),
-      toggleDescription: document.getElementById('toggleDescription'),
       progressContainer: document.getElementById('progressContainer'),
       progressFill: document.getElementById('progressFill'),
       progressText: document.getElementById('progressText'),
@@ -974,6 +980,10 @@
       cancelButton: document.getElementById('cancelButton'),
       createButton: document.getElementById('createButton'),
       statusMessage: document.getElementById('statusMessage'),
+      
+      // Naming toggle elements
+      namingToggle: document.getElementById('namingToggle'),
+      namingToggleDescription: document.getElementById('namingToggleDescription'),
       
       // Tab elements
       stringifyTab: document.getElementById('stringifyTab'),
@@ -1177,15 +1187,12 @@
           // Show create button when no collection is selected
           elements.createButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Text layers scanned';
-          hideNamingToggle();
           break;
           
         case 'collection-selected':
           // Show process button when collection is selected
           elements.processButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Text layers suitable for variables';
-          showNamingToggle();
-          updateNamingToggle();
           break;
           
         case 'processing':
@@ -1195,8 +1202,6 @@
           // Hide both process and create buttons during processing
           elements.processButton.classList.add('hidden');
           elements.createButton.classList.add('hidden');
-          // Hide naming toggle during processing
-          hideNamingToggle();
           // Disable collection selection during processing
           elements.collectionSelect.disabled = true;
           elements.collectionSelect.style.opacity = '0.6';
@@ -1207,8 +1212,6 @@
           // Show process button after completion
           elements.processButton.classList.remove('hidden');
           elements.textCounterLabel.textContent = 'Processing completed';
-          showNamingToggle();
-          updateNamingToggle();
           isProcessing = false;
           break;
           
@@ -1302,24 +1305,13 @@
       }
     }
     
-    function updateNamingToggle() {
-      // Update toggle state
-      elements.hierarchyToggle.checked = useHierarchicalNaming;
-      
-      // Update description text
-      if (useHierarchicalNaming) {
-        elements.toggleDescription.textContent = 'Hierarchical naming (e.g., "component/layer_text")';
+    function updateNamingToggleDescription(isHierarchical) {
+      const description = elements.namingToggleDescription;
+      if (isHierarchical) {
+        description.textContent = 'When enabled: Uses hierarchical names (e.g., "info_table/title_hello_world")';
       } else {
-        elements.toggleDescription.textContent = 'Simple content-based naming (e.g., "hello_world")';
+        description.textContent = 'When disabled: Uses simple content names (e.g., "Hello_World")';
       }
-    }
-    
-    function showNamingToggle() {
-      elements.namingToggleContainer.style.display = 'block';
-    }
-    
-    function hideNamingToggle() {
-      elements.namingToggleContainer.style.display = 'none';
     }
     
     function updateProgress(percentage, remaining = null) {
@@ -1403,7 +1395,7 @@
       sendMessage({ 
         type: 'create-variables', 
         collectionId: selectedCollection,
-        useHierarchicalNaming: useHierarchicalNaming
+        useHierarchicalNaming: elements.namingToggle.checked
       });
     });
     
@@ -1420,11 +1412,11 @@
       sendMessage({ type: 'create-default-collection' });
     });
     
-    // Naming convention toggle event listener
-    elements.hierarchyToggle.addEventListener('change', (e) => {
-      useHierarchicalNaming = e.target.checked;
-      updateNamingToggle();
-      console.log('Naming convention changed:', useHierarchicalNaming ? 'Hierarchical' : 'Simple');
+    // Naming toggle event listener
+    elements.namingToggle.addEventListener('change', (e) => {
+      updateNamingToggleDescription(e.target.checked);
+      // Store the preference for the processing
+      window.useHierarchicalNaming = e.target.checked;
     });
     
     // Tab navigation event listeners
@@ -1636,6 +1628,10 @@
       try {
         // Initialize tab system
         updateTabUI();
+        
+        // Initialize naming toggle
+        window.useHierarchicalNaming = elements.namingToggle.checked;
+        updateNamingToggleDescription(elements.namingToggle.checked);
         
         // Initialize stringify functionality
         sendMessage({ type: 'get-collections' });

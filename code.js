@@ -53,11 +53,11 @@ function createVariableName(text, textNode) {
             code: ERROR_CODES.INVALID_TEXT
         });
     }
-    // If no textNode provided, use simple naming
+    // If no textNode provided, use simple naming with content
     if (!textNode) {
         return createSimpleVariableName(text);
     }
-    // Create hierarchical naming: Group 2 / Group 1 / Name
+    // Create hierarchical naming with content appended for uniqueness
     const hierarchicalName = createHierarchicalVariableName(text, textNode);
     if (hierarchicalName.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
         return truncateVariableName(hierarchicalName);
@@ -79,7 +79,7 @@ function createSimpleVariableName(text) {
 }
 function createHierarchicalVariableName(text, textNode) {
     const parts = [];
-    // Use the layer name for variable naming (no text content suffix)
+    // Use the layer name for variable naming
     let textName = sanitizeName(textNode.name);
     if (!textName) {
         textName = 'text_variable';
@@ -94,6 +94,13 @@ function createHierarchicalVariableName(text, textNode) {
     }
     if (meaningfulParent && meaningfulParent !== rootComponent) {
         parts.push(meaningfulParent);
+    }
+    // Append sanitized text content to layer name to ensure uniqueness
+    // This prevents conflicts when multiple layers have the same name but different content
+    // e.g., "title" with content "Class" becomes "title_class", "title" with "Engine" becomes "title_engine"
+    const sanitizedContent = sanitizeName(text);
+    if (sanitizedContent && sanitizedContent !== textName) {
+        textName = `${textName}_${sanitizedContent}`;
     }
     parts.push(textName);
     const finalName = parts.join('/');
@@ -155,17 +162,46 @@ function sanitizeName(name) {
     return name
         .trim()
         .toLowerCase()
-        .replace(/\s+/g, '_') // Convert spaces to underscores first
+        // Enhanced character handling for common special cases
+        .replace(/@/g, '_at_') // email@domain.com → email_at_domain_com
+        .replace(/#/g, '_hash_') // #hashtag → _hash_hashtag
+        .replace(/\$/g, '_dollar_') // $99 → _dollar_99
+        .replace(/%/g, '_percent_') // 50% → 50_percent_
+        .replace(/&/g, '_and_') // A & B → A_and_B
+        .replace(/\+/g, '_plus_') // A + B → A_plus_B
+        .replace(/=/g, '_equals_') // A = B → A_equals_B
+        .replace(/\s+/g, '_') // Convert spaces to underscores
         .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '_') // Replace other invalid chars with underscores
         .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
         .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
 }
 function truncateVariableName(text) {
     const maxLength = PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH;
+    if (text.length <= maxLength)
+        return text;
     const separator = '___';
     const availableLength = maxLength - separator.length;
-    const startLength = Math.ceil(availableLength * 0.6);
-    const endLength = Math.floor(availableLength * 0.4);
+    // Smart truncation: preserve meaningful parts
+    // Try to break at word boundaries (underscores) when possible
+    const parts = text.split('/');
+    if (parts.length > 1) {
+        // For hierarchical names, try to preserve the last part (most specific)
+        const lastPart = parts[parts.length - 1];
+        const remainingLength = availableLength - lastPart.length;
+        if (remainingLength > 10) {
+            const firstParts = parts.slice(0, -1).join('/');
+            if (firstParts.length <= remainingLength) {
+                return `${firstParts}/${lastPart}`;
+            }
+            else {
+                const truncatedFirst = firstParts.substring(0, remainingLength - 3) + '...';
+                return `${truncatedFirst}/${lastPart}`;
+            }
+        }
+    }
+    // Fallback to start/end preservation
+    const startLength = Math.floor(availableLength * 0.65); // Slightly favor the start
+    const endLength = availableLength - startLength;
     const start = text.substring(0, startLength);
     const end = text.substring(text.length - endLength);
     return `${start}${separator}${end}`;
@@ -296,12 +332,47 @@ function createScanPreview(scope) {
         hasSelection: scope.type === 'selection'
     };
 }
-function preprocessTextForVariable(text, textNode) {
-    const trimmed = text.trim();
+function groupTextLayersByContent(textLayers, useHierarchicalNaming) {
+    const contentMap = new Map();
+    textLayers.forEach(layer => {
+        const trimmedContent = layer.characters.trim();
+        const contentKey = trimmedContent.toLowerCase(); // Case-insensitive grouping
+        if (contentMap.has(contentKey)) {
+            // Add to existing group
+            contentMap.get(contentKey).layers.push(layer);
+        }
+        else {
+            // Create new group with appropriate naming convention
+            let variableName;
+            if (useHierarchicalNaming === false) {
+                // Simple content-based naming
+                variableName = createSimpleVariableName(trimmedContent);
+            }
+            else {
+                // Default hierarchical naming (backward compatibility)
+                variableName = createVariableName(trimmedContent, layer.node);
+            }
+            contentMap.set(contentKey, {
+                content: layer.characters, // Keep original casing
+                trimmedContent: trimmedContent,
+                variableName: variableName,
+                layers: [layer],
+                needsNewVariable: true
+            });
+        }
+    });
+    return Array.from(contentMap.values());
+}
+function analyzeContentGroups(groups) {
+    const totalLayers = groups.reduce((sum, group) => sum + group.layers.length, 0);
+    const uniqueContent = groups.filter(group => group.layers.length === 1).length;
+    const duplicateContent = groups.filter(group => group.layers.length > 1).length;
+    const averageLayersPerGroup = totalLayers / groups.length;
     return {
-        original: text,
-        processed: trimmed, // Use text content for variable value
-        variableName: createVariableName(trimmed, textNode) // Use layer name for variable name
+        totalLayers,
+        uniqueContent,
+        duplicateContent,
+        averageLayersPerGroup: Math.round(averageLayersPerGroup * 10) / 10
     };
 }
 // ============================================================================
@@ -376,11 +447,21 @@ async function createStringVariable(collectionId, variableName, content) {
     try {
         const collection = await validateCollection(collectionId);
         const existingVariables = await getExistingVariables(collectionId);
+        // Check if exact variable name and content combination already exists
+        const exactMatch = findExistingVariable(existingVariables, variableName, content);
+        if (exactMatch) {
+            return exactMatch;
+        }
+        // Check for name conflicts (same variable name, different content)
         const nameConflicts = Array.from(existingVariables.keys())
             .filter(key => key.startsWith(`${variableName}:`));
         let finalVariableName = variableName;
         if (nameConflicts.length > 0) {
-            finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
+            // Only append suffix if there's a true conflict (same name, different content)
+            const hasContentConflict = nameConflicts.some(key => key !== `${variableName}:${content}`);
+            if (hasContentConflict) {
+                finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
+            }
         }
         const variable = figma.variables.createVariable(finalVariableName, collection, 'STRING');
         variable.setValueForMode(collection.defaultModeId, content);
@@ -685,7 +766,7 @@ async function handleMessage(msg) {
             await handleScanTextLayers(msg.selectedCollectionId);
             break;
         case 'create-variables':
-            await handleCreateVariables(msg.collectionId);
+            await handleCreateVariables(msg.collectionId, msg.useHierarchicalNaming);
             break;
         case 'create-default-collection':
             await handleCreateDefaultCollection();
@@ -765,7 +846,7 @@ async function handleScanTextLayers(selectedCollectionId) {
         throw new PluginError(`Failed to scan text layers: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
-async function handleCreateVariables(collectionId) {
+async function handleCreateVariables(collectionId, useHierarchicalNaming) {
     if (!collectionId) {
         throw new PluginError('Collection ID is required');
     }
@@ -780,7 +861,7 @@ async function handleCreateVariables(collectionId) {
         if (textLayers.length === 0) {
             throw new PluginError('No valid text layers found for processing');
         }
-        const result = await processTextLayersWithProgress(textLayers, collectionId);
+        const result = await processTextLayersWithProgress(textLayers, collectionId, useHierarchicalNaming);
         sendMessage({
             type: 'variables-created',
             result
@@ -869,35 +950,59 @@ async function handleSelectGhostLayer(nodeId) {
         figma.notify('Failed to select layer', { error: true, timeout: 3000 });
     }
 }
-async function processTextLayersWithProgress(textLayers, collectionId) {
+async function processTextLayersWithProgress(textLayers, collectionId, useHierarchicalNaming) {
+    const startTime = Date.now();
     const stats = {
         created: 0,
         connected: 0,
         skipped: 0,
         errors: 0
     };
+    // Convert to TextLayerInfo format
+    const layerInfos = textLayers.map(layer => ({
+        id: layer.id,
+        name: layer.name,
+        characters: layer.characters,
+        node: layer
+    }));
+    // Group by content for efficient processing
+    const contentGroups = groupTextLayersByContent(layerInfos, useHierarchicalNaming);
+    const groupAnalysis = analyzeContentGroups(contentGroups);
+    console.log('Content Analysis:', {
+        'Total layers': groupAnalysis.totalLayers,
+        'Unique content groups': groupAnalysis.uniqueContent,
+        'Duplicate content groups': groupAnalysis.duplicateContent,
+        'Average layers per group': groupAnalysis.averageLayersPerGroup
+    });
     const existingVariables = await getExistingVariables(collectionId);
     const variableCache = createVariableCache();
-    const totalLayers = textLayers.length;
-    const errors = [];
-    for (let i = 0; i < totalLayers; i += PLUGIN_CONFIG.BATCH_SIZE) {
-        const batch = textLayers.slice(i, i + PLUGIN_CONFIG.BATCH_SIZE);
-        for (const textLayer of batch) {
+    const detailedErrors = [];
+    // Process by content groups instead of individual layers
+    for (let i = 0; i < contentGroups.length; i += PLUGIN_CONFIG.BATCH_SIZE) {
+        const batch = contentGroups.slice(i, i + PLUGIN_CONFIG.BATCH_SIZE);
+        for (const group of batch) {
             try {
-                await processTextLayer(textLayer, existingVariables, variableCache, collectionId, stats);
+                await processContentGroup(group, existingVariables, variableCache, collectionId, stats);
             }
             catch (error) {
-                console.error(`Error processing text layer "${textLayer.name}":`, error);
-                stats.errors++;
-                errors.push({
-                    layer: textLayer.name,
-                    error: error instanceof Error ? error.message : 'Unknown error'
+                console.error(`Error processing content group "${group.content}":`, error);
+                stats.errors += group.layers.length;
+                // Add detailed error for each layer in the failed group
+                group.layers.forEach(layer => {
+                    detailedErrors.push({
+                        layerId: layer.id,
+                        layerName: layer.name,
+                        content: group.content,
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                        errorCode: error instanceof PluginError ? error.code : undefined,
+                        timestamp: Date.now()
+                    });
                 });
             }
         }
-        const processed = Math.min(i + PLUGIN_CONFIG.BATCH_SIZE, totalLayers);
-        const progress = Math.round((processed / totalLayers) * 100);
-        const remaining = totalLayers - processed;
+        const processed = Math.min(i + PLUGIN_CONFIG.BATCH_SIZE, contentGroups.length);
+        const progress = Math.round((processed / contentGroups.length) * 100);
+        const remaining = contentGroups.length - processed;
         sendMessage({
             type: 'progress-update',
             progress,
@@ -905,42 +1010,63 @@ async function processTextLayersWithProgress(textLayers, collectionId) {
         });
         await new Promise(resolve => setTimeout(resolve, PLUGIN_CONFIG.PROGRESS_UPDATE_DELAY));
     }
-    if (errors.length > 0) {
-        console.warn('Processing errors:', errors);
+    if (detailedErrors.length > 0) {
+        console.warn('Detailed processing errors:', detailedErrors);
     }
-    return Object.assign(Object.assign({}, stats), { totalProcessed: stats.created + stats.connected });
+    const processingTime = Date.now() - startTime;
+    return Object.assign(Object.assign({}, stats), { totalProcessed: stats.created + stats.connected, contentGroups: contentGroups.length, duplicateContentGroups: groupAnalysis.duplicateContent, processingTime });
 }
-async function processTextLayer(textLayer, existingVariables, variableCache, collectionId, stats) {
-    if (!validateTextLayer(textLayer)) {
-        stats.skipped++;
-        return;
-    }
-    // Process text layer using standard logic with hierarchical naming
-    const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters, textLayer);
-    if (!textContent) {
-        stats.skipped++;
-        return;
-    }
-    let variable = getFromVariableCache(variableCache, variableName, textContent);
+async function processContentGroup(group, existingVariables, variableCache, collectionId, stats) {
+    // Check if we can reuse an existing variable for this content
+    let variable = getFromVariableCache(variableCache, group.variableName, group.trimmedContent);
     if (variable) {
-        bindTextNodeToVariable(textLayer, variable);
-        stats.connected++;
+        // Bind all layers in this group to the cached variable
+        for (const layer of group.layers) {
+            if (layer.node && validateTextLayer(layer.node)) {
+                bindTextNodeToVariable(layer.node, variable);
+                stats.connected++;
+            }
+            else {
+                stats.skipped++;
+            }
+        }
+        return;
     }
-    else {
-        variable = findExistingVariable(existingVariables, variableName, textContent);
-        if (variable) {
-            bindTextNodeToVariable(textLayer, variable);
-            stats.connected++;
+    // Check existing variables
+    variable = findExistingVariable(existingVariables, group.variableName, group.trimmedContent);
+    if (variable) {
+        // Bind all layers in this group to the existing variable
+        for (const layer of group.layers) {
+            if (layer.node && validateTextLayer(layer.node)) {
+                bindTextNodeToVariable(layer.node, variable);
+                stats.connected++;
+            }
+            else {
+                stats.skipped++;
+            }
+        }
+        return;
+    }
+    // Create new variable for this content group
+    variable = await createStringVariable(collectionId, group.variableName, group.trimmedContent);
+    const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
+    if (collection) {
+        addToVariableCache(variableCache, variable, collection);
+    }
+    // Bind all layers in this group to the new variable
+    let layersProcessed = 0;
+    for (const layer of group.layers) {
+        if (layer.node && validateTextLayer(layer.node)) {
+            bindTextNodeToVariable(layer.node, variable);
+            layersProcessed++;
         }
         else {
-            variable = await createStringVariable(collectionId, variableName, textContent);
-            const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
-            if (collection) {
-                addToVariableCache(variableCache, variable, collection);
-            }
-            bindTextNodeToVariable(textLayer, variable);
-            stats.created++;
+            stats.skipped++;
         }
+    }
+    if (layersProcessed > 0) {
+        stats.created++; // One variable created for the group
+        stats.connected += layersProcessed - 1; // Additional connections beyond the first
     }
 }
 function createProcessingSummary(result) {
@@ -957,8 +1083,21 @@ function createProcessingSummary(result) {
     if (result.errors > 0) {
         parts.push(`${result.errors} errors occurred`);
     }
+    // Add analytics information
+    const analytics = [];
+    if (result.contentGroups) {
+        analytics.push(`${result.contentGroups} content groups processed`);
+    }
+    if (result.duplicateContentGroups && result.duplicateContentGroups > 0) {
+        analytics.push(`${result.duplicateContentGroups} duplicate content groups found`);
+    }
+    if (result.processingTime) {
+        const timeInSeconds = (result.processingTime / 1000).toFixed(1);
+        analytics.push(`completed in ${timeInSeconds}s`);
+    }
     const summary = parts.length > 0 ? parts.join(', ') : 'No changes made';
-    return `Processing complete: ${summary}`;
+    const analyticsText = analytics.length > 0 ? ` (${analytics.join(', ')})` : '';
+    return `Processing complete: ${summary}${analyticsText}`;
 }
 function handlePluginError(error) {
     let message;

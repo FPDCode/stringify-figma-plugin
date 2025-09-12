@@ -175,19 +175,16 @@ function isValidTextForVariable(text: string): boolean {
   return VARIABLE_NAME_PATTERNS.SAFE_CHARS.test(firstChar);
 }
 
-function createVariableName(text: string, textNode?: TextNode, useHierarchical: boolean = true): string {
+function createVariableName(text: string, textNode?: TextNode): string {
   if (!text || text.trim().length === 0) {
     throw new PluginError('Cannot create variable name from empty text', {
       code: ERROR_CODES.INVALID_TEXT
     });
   }
 
-  // Always create simple name from content first
-  const simpleName = createSimpleVariableName(text);
-  
-  // If hierarchical naming is disabled or no textNode provided, use simple naming
-  if (!useHierarchical || !textNode) {
-    return simpleName;
+  // If no textNode provided, use simple naming with content
+  if (!textNode) {
+    return createSimpleVariableName(text);
   }
 
   // Create hierarchical naming with content appended for uniqueness
@@ -523,7 +520,7 @@ function createScanPreview(scope: ScanScope): ScanPreview {
 }
 
 
-function groupTextLayersByContent(textLayers: TextLayerInfo[], useHierarchical: boolean = true): ContentGroup[] {
+function groupTextLayersByContent(textLayers: TextLayerInfo[], useHierarchicalNaming?: boolean): ContentGroup[] {
   const contentMap = new Map<string, ContentGroup>();
   
   textLayers.forEach(layer => {
@@ -534,8 +531,16 @@ function groupTextLayersByContent(textLayers: TextLayerInfo[], useHierarchical: 
       // Add to existing group
       contentMap.get(contentKey)!.layers.push(layer);
     } else {
-      // Create new group
-      const variableName = createVariableName(trimmedContent, layer.node, useHierarchical);
+      // Create new group with appropriate naming convention
+      let variableName: string;
+      if (useHierarchicalNaming === false) {
+        // Simple content-based naming
+        variableName = createSimpleVariableName(trimmedContent);
+      } else {
+        // Default hierarchical naming (backward compatibility)
+        variableName = createVariableName(trimmedContent, layer.node);
+      }
+      
       contentMap.set(contentKey, {
         content: layer.characters, // Keep original casing
         trimmedContent: trimmedContent,
@@ -1124,7 +1129,7 @@ async function handleScanTextLayers(selectedCollectionId?: string): Promise<void
   }
 }
 
-async function handleCreateVariables(collectionId: string, useHierarchicalNaming: boolean = true): Promise<void> {
+async function handleCreateVariables(collectionId: string, useHierarchicalNaming?: boolean): Promise<void> {
   if (!collectionId) {
     throw new PluginError('Collection ID is required');
   }
@@ -1251,7 +1256,7 @@ async function handleSelectGhostLayer(nodeId: string): Promise<void> {
 async function processTextLayersWithProgress(
   textLayers: TextNode[], 
   collectionId: string,
-  useHierarchicalNaming: boolean = true
+  useHierarchicalNaming?: boolean
 ): Promise<ProcessingResult> {
   const startTime = Date.now();
   const stats: ProcessingStats = {
