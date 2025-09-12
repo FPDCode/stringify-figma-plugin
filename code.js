@@ -581,27 +581,33 @@ async function checkVariableConnection(textNode, allValidVariableIds) {
         if (!textNode.boundVariables || !textNode.boundVariables[binding]) {
             return null; // No connection - not a ghost
         }
-        const boundVariable = textNode.getBoundVariable(binding);
+        // Get the bound variable reference directly from boundVariables property
+        const boundVariableRef = textNode.boundVariables[binding];
         // No bound variable reference - not a ghost
-        if (!boundVariable) {
+        if (!boundVariableRef || typeof boundVariableRef !== 'object') {
+            return null;
+        }
+        // Extract variable ID from the bound variable reference
+        const variableId = 'id' in boundVariableRef ? boundVariableRef.id : null;
+        if (!variableId) {
             return null;
         }
         // Check if the bound variable ID exists in our valid set
-        if (!allValidVariableIds.has(boundVariable.id)) {
+        if (!allValidVariableIds.has(variableId)) {
             // Ghost variable - binding exists but variable ID not in any collection
             return {
                 nodeId: textNode.id,
                 nodeName: textNode.name,
                 textContent: textNode.characters,
                 bindingType: binding,
-                ghostVariableId: boundVariable.id
+                ghostVariableId: variableId
             };
         }
         // Variable ID exists in collections - it's a valid connection
         return null;
     }
     catch (error) {
-        // getBoundVariable() threw an error - likely a ghost or corrupted binding
+        // Error accessing bound variables - likely a ghost or corrupted binding
         console.warn(`Error checking variable connection for node ${textNode.id}:`, error);
         return {
             nodeId: textNode.id,
@@ -613,6 +619,7 @@ async function checkVariableConnection(textNode, allValidVariableIds) {
     }
 }
 async function clearGhostVariables(ghostIds) {
+    var _a;
     const result = {
         totalAttempted: ghostIds.length,
         successfullyCleared: 0,
@@ -636,10 +643,11 @@ async function clearGhostVariables(ghostIds) {
             let clearedAny = false;
             for (const binding of bindings) {
                 try {
-                    const boundVariable = node.getBoundVariable(binding);
-                    if (boundVariable) {
+                    // Get bound variable reference directly from boundVariables property
+                    const boundVariableRef = (_a = node.boundVariables) === null || _a === void 0 ? void 0 : _a[binding];
+                    if (boundVariableRef && typeof boundVariableRef === 'object' && 'id' in boundVariableRef) {
                         // Check if this is actually a ghost (variable doesn't exist)
-                        const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
+                        const variable = await figma.variables.getVariableByIdAsync(boundVariableRef.id);
                         if (!variable) {
                             // Clear the ghost binding
                             node.setBoundVariable(binding, null);
