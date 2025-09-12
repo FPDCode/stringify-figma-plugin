@@ -247,33 +247,29 @@ function createVariableName(text: string, textNode?: TextNode, namingMode?: 'sim
 
 
 /**
- * Generate simple variable name according to PRD specifications
- * - Remove leading whitespace only
- * - Preserve original capitalization exactly as designed
- * - Replace spaces with underscores
- * - Keep all other characters as-is (including special characters)
- * - Apply smart truncation for long content
+ * Generate simple variable name using hierarchical processing logic but without parent hierarchy
+ * - Uses robust sanitization from advanced mode
+ * - Preserves original capitalization (Live Activities → Live_Activities)
+ * - Applies same character handling and validation as hierarchical mode
+ * - Uses existing truncation logic for length management
  */
 function generateSimpleVariableName(textContent: string): string {
-  // Remove leading whitespace only (preserve trailing and internal whitespace initially)
-  const trimmedContent = textContent.replace(/^\s+/, '');
+  // Use the robust sanitization logic from hierarchical mode but preserve case
+  let processed = sanitizeNamePreserveCase(textContent);
   
-  // If empty after trimming leading whitespace, return default
-  if (!trimmedContent) {
+  // If empty after processing, return default
+  if (!processed) {
     return 'text_variable';
   }
-  
-  // Replace spaces with underscores, preserve case and other characters
-  let processed = trimmedContent.replace(/\s/g, '_');
   
   // Ensure it starts with a valid character for Figma variables
   if (!/^[a-zA-Z_]/.test(processed)) {
     processed = `Var_${processed}`;
   }
   
-  // Apply smart truncation for long content
+  // Apply existing truncation logic if too long (reuse hierarchical truncation)
   if (processed.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
-    return truncateSimpleVariableName(processed);
+    return truncateVariableName(processed);
   }
   
   return processed;
@@ -386,6 +382,31 @@ function sanitizeName(name: string): string {
     .trim()
     .toLowerCase()
     // Enhanced character handling for common special cases
+    .replace(/@/g, '_at_')           // email@domain.com → email_at_domain_com
+    .replace(/#/g, '_hash_')         // #hashtag → _hash_hashtag
+    .replace(/\$/g, '_dollar_')      // $99 → _dollar_99
+    .replace(/%/g, '_percent_')      // 50% → 50_percent_
+    .replace(/&/g, '_and_')          // A & B → A_and_B
+    .replace(/\+/g, '_plus_')        // A + B → A_plus_B
+    .replace(/=/g, '_equals_')       // A = B → A_equals_B
+    .replace(/\s+/g, '_')            // Convert spaces to underscores
+    .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '_') // Replace other invalid chars with underscores
+    .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
+    .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
+}
+
+/**
+ * Sanitize name preserving original capitalization for simple mode
+ * Uses same robust processing as hierarchical mode but keeps case intact
+ */
+function sanitizeNamePreserveCase(name: string): string {
+  if (!name || name.trim().length === 0) {
+    return '';
+  }
+  
+  return name
+    .trim()
+    // Enhanced character handling for common special cases (preserve case)
     .replace(/@/g, '_at_')           // email@domain.com → email_at_domain_com
     .replace(/#/g, '_hash_')         // #hashtag → _hash_hashtag
     .replace(/\$/g, '_dollar_')      // $99 → _dollar_99
