@@ -109,7 +109,7 @@ class PluginError extends Error {
 type MessageFromUI = 
   | { type: 'get-collections' }
   | { type: 'scan-text-layers'; selectedCollectionId?: string }
-  | { type: 'create-variables'; collectionId: string }
+  | { type: 'create-variables'; collectionId: string; useHierarchicalNaming?: boolean }
   | { type: 'create-default-collection' }
   | { type: 'scan-ghost-variables' }
   | { type: 'clear-ghost-variables'; ghostIds: string[] }
@@ -175,16 +175,19 @@ function isValidTextForVariable(text: string): boolean {
   return VARIABLE_NAME_PATTERNS.SAFE_CHARS.test(firstChar);
 }
 
-function createVariableName(text: string, textNode?: TextNode): string {
+function createVariableName(text: string, textNode?: TextNode, useHierarchical: boolean = true): string {
   if (!text || text.trim().length === 0) {
     throw new PluginError('Cannot create variable name from empty text', {
       code: ERROR_CODES.INVALID_TEXT
     });
   }
 
-  // If no textNode provided, use simple naming with content
-  if (!textNode) {
-    return createSimpleVariableName(text);
+  // Always create simple name from content first
+  const simpleName = createSimpleVariableName(text);
+  
+  // If hierarchical naming is disabled or no textNode provided, use simple naming
+  if (!useHierarchical || !textNode) {
+    return simpleName;
   }
 
   // Create hierarchical naming with content appended for uniqueness
@@ -520,7 +523,7 @@ function createScanPreview(scope: ScanScope): ScanPreview {
 }
 
 
-function groupTextLayersByContent(textLayers: TextLayerInfo[]): ContentGroup[] {
+function groupTextLayersByContent(textLayers: TextLayerInfo[], useHierarchical: boolean = true): ContentGroup[] {
   const contentMap = new Map<string, ContentGroup>();
   
   textLayers.forEach(layer => {
@@ -532,7 +535,7 @@ function groupTextLayersByContent(textLayers: TextLayerInfo[]): ContentGroup[] {
       contentMap.get(contentKey)!.layers.push(layer);
     } else {
       // Create new group
-      const variableName = createVariableName(trimmedContent, layer.node);
+      const variableName = createVariableName(trimmedContent, layer.node, useHierarchical);
       contentMap.set(contentKey, {
         content: layer.characters, // Keep original casing
         trimmedContent: trimmedContent,
@@ -1033,7 +1036,7 @@ async function handleMessage(msg: MessageFromUI): Promise<void> {
       await handleScanTextLayers(msg.selectedCollectionId);
       break;
     case 'create-variables':
-      await handleCreateVariables(msg.collectionId);
+      await handleCreateVariables(msg.collectionId, msg.useHierarchicalNaming);
       break;
     case 'create-default-collection':
       await handleCreateDefaultCollection();
@@ -1121,7 +1124,7 @@ async function handleScanTextLayers(selectedCollectionId?: string): Promise<void
   }
 }
 
-async function handleCreateVariables(collectionId: string): Promise<void> {
+async function handleCreateVariables(collectionId: string, useHierarchicalNaming: boolean = true): Promise<void> {
   if (!collectionId) {
     throw new PluginError('Collection ID is required');
   }
@@ -1141,7 +1144,7 @@ async function handleCreateVariables(collectionId: string): Promise<void> {
       throw new PluginError('No valid text layers found for processing');
     }
 
-    const result = await processTextLayersWithProgress(textLayers, collectionId);
+    const result = await processTextLayersWithProgress(textLayers, collectionId, useHierarchicalNaming);
     
     sendMessage({
       type: 'variables-created',
@@ -1247,7 +1250,8 @@ async function handleSelectGhostLayer(nodeId: string): Promise<void> {
 
 async function processTextLayersWithProgress(
   textLayers: TextNode[], 
-  collectionId: string
+  collectionId: string,
+  useHierarchicalNaming: boolean = true
 ): Promise<ProcessingResult> {
   const startTime = Date.now();
   const stats: ProcessingStats = {
@@ -1266,7 +1270,7 @@ async function processTextLayersWithProgress(
   }));
 
   // Group by content for efficient processing
-  const contentGroups = groupTextLayersByContent(layerInfos);
+  const contentGroups = groupTextLayersByContent(layerInfos, useHierarchicalNaming);
   const groupAnalysis = analyzeContentGroups(contentGroups);
   
   console.log('Content Analysis:', {
