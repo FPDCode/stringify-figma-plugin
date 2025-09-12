@@ -109,7 +109,7 @@ class PluginError extends Error {
 type MessageFromUI = 
   | { type: 'get-collections' }
   | { type: 'scan-text-layers'; selectedCollectionId?: string }
-  | { type: 'create-variables'; collectionId: string; useHierarchicalNaming?: boolean }
+  | { type: 'create-variables'; collectionId: string }
   | { type: 'create-default-collection' }
   | { type: 'scan-ghost-variables' }
   | { type: 'clear-ghost-variables'; ghostIds: string[] }
@@ -520,7 +520,7 @@ function createScanPreview(scope: ScanScope): ScanPreview {
 }
 
 
-function groupTextLayersByContent(textLayers: TextLayerInfo[], useHierarchicalNaming?: boolean): ContentGroup[] {
+function groupTextLayersByContent(textLayers: TextLayerInfo[]): ContentGroup[] {
   const contentMap = new Map<string, ContentGroup>();
   
   textLayers.forEach(layer => {
@@ -531,16 +531,8 @@ function groupTextLayersByContent(textLayers: TextLayerInfo[], useHierarchicalNa
       // Add to existing group
       contentMap.get(contentKey)!.layers.push(layer);
     } else {
-      // Create new group with appropriate naming convention
-      let variableName: string;
-      if (useHierarchicalNaming === false) {
-        // Simple content-based naming
-        variableName = createSimpleVariableName(trimmedContent);
-      } else {
-        // Default hierarchical naming (backward compatibility)
-        variableName = createVariableName(trimmedContent, layer.node);
-      }
-      
+      // Create new group
+      const variableName = createVariableName(trimmedContent, layer.node);
       contentMap.set(contentKey, {
         content: layer.characters, // Keep original casing
         trimmedContent: trimmedContent,
@@ -1041,7 +1033,7 @@ async function handleMessage(msg: MessageFromUI): Promise<void> {
       await handleScanTextLayers(msg.selectedCollectionId);
       break;
     case 'create-variables':
-      await handleCreateVariables(msg.collectionId, msg.useHierarchicalNaming);
+      await handleCreateVariables(msg.collectionId);
       break;
     case 'create-default-collection':
       await handleCreateDefaultCollection();
@@ -1129,7 +1121,7 @@ async function handleScanTextLayers(selectedCollectionId?: string): Promise<void
   }
 }
 
-async function handleCreateVariables(collectionId: string, useHierarchicalNaming?: boolean): Promise<void> {
+async function handleCreateVariables(collectionId: string): Promise<void> {
   if (!collectionId) {
     throw new PluginError('Collection ID is required');
   }
@@ -1149,7 +1141,7 @@ async function handleCreateVariables(collectionId: string, useHierarchicalNaming
       throw new PluginError('No valid text layers found for processing');
     }
 
-    const result = await processTextLayersWithProgress(textLayers, collectionId, useHierarchicalNaming);
+    const result = await processTextLayersWithProgress(textLayers, collectionId);
     
     sendMessage({
       type: 'variables-created',
@@ -1255,8 +1247,7 @@ async function handleSelectGhostLayer(nodeId: string): Promise<void> {
 
 async function processTextLayersWithProgress(
   textLayers: TextNode[], 
-  collectionId: string,
-  useHierarchicalNaming?: boolean
+  collectionId: string
 ): Promise<ProcessingResult> {
   const startTime = Date.now();
   const stats: ProcessingStats = {
@@ -1275,7 +1266,7 @@ async function processTextLayersWithProgress(
   }));
 
   // Group by content for efficient processing
-  const contentGroups = groupTextLayersByContent(layerInfos, useHierarchicalNaming);
+  const contentGroups = groupTextLayersByContent(layerInfos);
   const groupAnalysis = analyzeContentGroups(contentGroups);
   
   console.log('Content Analysis:', {
