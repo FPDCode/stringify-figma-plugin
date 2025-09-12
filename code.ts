@@ -199,10 +199,18 @@ function createSimpleVariableName(text: string): string {
 function createHierarchicalVariableName(text: string, textNode: TextNode): string {
   const parts: string[] = [];
   
-  // Use the layer name for variable naming (no text content suffix)
+  // Use the layer name for variable naming
   let textName = sanitizeName(textNode.name);
   if (!textName) {
     textName = 'text_variable';
+  }
+  
+  // Append sanitized text content to ensure uniqueness for duplicate layer names
+  // This prevents conflicts when multiple layers have the same name but different content
+  // e.g., "title" with content "Home" becomes "title_home", "title" with "About" becomes "title_about"
+  const sanitizedContent = sanitizeName(text);
+  if (sanitizedContent && sanitizedContent !== textName) {
+    textName = `${textName}_${sanitizedContent}`;
   }
   
   // Find meaningful parent using smart hierarchy traversal
@@ -211,7 +219,7 @@ function createHierarchicalVariableName(text: string, textNode: TextNode): strin
   // Find root component
   const rootComponent = findRootComponent(textNode);
   
-  // Build the hierarchical name: Component / MeaningfulParent / LayerName
+  // Build the hierarchical name: Component / MeaningfulParent / LayerName_TextValue
   if (rootComponent && rootComponent !== 'root') {
     parts.push(rootComponent);
   }
