@@ -72,11 +72,6 @@ interface DetailedProcessingError {
   timestamp: number;
 }
 
-interface TextProcessingResult {
-  original: string;
-  processed: string;
-  variableName: string;
-}
 
 // Enhanced Scanning Interfaces
 interface ScanScope {
@@ -524,14 +519,6 @@ function createScanPreview(scope: ScanScope): ScanPreview {
   };
 }
 
-function preprocessTextForVariable(text: string, textNode?: TextNode): TextProcessingResult {
-  const trimmed = text.trim();
-  return {
-    original: text,
-    processed: trimmed, // Use text content for variable value
-    variableName: createVariableName(trimmed, textNode) // Use layer name for variable name
-  };
-}
 
 function groupTextLayersByContent(textLayers: TextLayerInfo[]): ContentGroup[] {
   const contentMap = new Map<string, ContentGroup>();
@@ -1410,50 +1397,6 @@ async function processContentGroup(
   }
 }
 
-async function processTextLayer(
-  textLayer: TextNode,
-  existingVariables: Map<string, Variable>,
-  variableCache: Map<string, VariableCacheEntry>,
-  collectionId: string,
-  stats: ProcessingStats
-): Promise<void> {
-  if (!validateTextLayer(textLayer)) {
-    stats.skipped++;
-    return;
-  }
-
-  // Process text layer using standard logic with hierarchical naming
-  const { processed: textContent, variableName } = preprocessTextForVariable(textLayer.characters, textLayer);
-  
-  if (!textContent) {
-    stats.skipped++;
-    return;
-  }
-
-  let variable = getFromVariableCache(variableCache, variableName, textContent);
-  
-  if (variable) {
-    bindTextNodeToVariable(textLayer, variable);
-    stats.connected++;
-  } else {
-    variable = findExistingVariable(existingVariables, variableName, textContent);
-    
-    if (variable) {
-      bindTextNodeToVariable(textLayer, variable);
-      stats.connected++;
-    } else {
-      variable = await createStringVariable(collectionId, variableName, textContent);
-      
-      const collection = await figma.variables.getVariableCollectionByIdAsync(collectionId);
-      if (collection) {
-        addToVariableCache(variableCache, variable, collection);
-      }
-      
-      bindTextNodeToVariable(textLayer, variable);
-      stats.created++;
-    }
-  }
-}
 
 
 function createProcessingSummary(result: ProcessingResult): string {
