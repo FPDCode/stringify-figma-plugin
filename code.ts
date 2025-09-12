@@ -1,3 +1,4 @@
+
 // Stringify Plugin - Convert text layers to variables
 // Enhanced V2 implementation with consolidated modular architecture
 
@@ -165,12 +166,12 @@ function createVariableName(text: string, textNode?: TextNode): string {
     });
   }
 
-  // If no textNode provided, use simple naming
+  // If no textNode provided, use simple naming with content
   if (!textNode) {
     return createSimpleVariableName(text);
   }
 
-  // Create hierarchical naming: Group 2 / Group 1 / Name
+  // Create hierarchical naming with content appended for uniqueness
   const hierarchicalName = createHierarchicalVariableName(text, textNode);
   
   if (hierarchicalName.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
@@ -199,7 +200,7 @@ function createSimpleVariableName(text: string): string {
 function createHierarchicalVariableName(text: string, textNode: TextNode): string {
   const parts: string[] = [];
   
-  // Use the layer name for variable naming (no text content suffix)
+  // Use the layer name for variable naming
   let textName = sanitizeName(textNode.name);
   if (!textName) {
     textName = 'text_variable';
@@ -218,6 +219,14 @@ function createHierarchicalVariableName(text: string, textNode: TextNode): strin
   
   if (meaningfulParent && meaningfulParent !== rootComponent) {
     parts.push(meaningfulParent);
+  }
+  
+  // Append sanitized text content to layer name to ensure uniqueness
+  // This prevents conflicts when multiple layers have the same name but different content
+  // e.g., "title" with content "Class" becomes "title_class", "title" with "Engine" becomes "title_engine"
+  const sanitizedContent = sanitizeName(text);
+  if (sanitizedContent && sanitizedContent !== textName) {
+    textName = `${textName}_${sanitizedContent}`;
   }
   
   parts.push(textName);
@@ -557,12 +566,24 @@ async function createStringVariable(
     const collection = await validateCollection(collectionId);
     
     const existingVariables = await getExistingVariables(collectionId);
+    
+    // Check if exact variable name and content combination already exists
+    const exactMatch = findExistingVariable(existingVariables, variableName, content);
+    if (exactMatch) {
+      return exactMatch;
+    }
+    
+    // Check for name conflicts (same variable name, different content)
     const nameConflicts = Array.from(existingVariables.keys())
       .filter(key => key.startsWith(`${variableName}:`));
     
     let finalVariableName = variableName;
     if (nameConflicts.length > 0) {
-      finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
+      // Only append suffix if there's a true conflict (same name, different content)
+      const hasContentConflict = nameConflicts.some(key => key !== `${variableName}:${content}`);
+      if (hasContentConflict) {
+        finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
+      }
     }
     
     const variable = figma.variables.createVariable(finalVariableName, collection, 'STRING');
