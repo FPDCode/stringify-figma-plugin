@@ -509,7 +509,7 @@ async function checkVariableConnection(textNode, allValidVariableIds) {
         }
         const boundVariable = textNode.getBoundVariable(binding);
         // No bound variable reference - not a ghost
-        if (!boundVariable || boundVariable.type !== 'VARIABLE_ALIAS') {
+        if (!boundVariable) {
             return null;
         }
         // Check if the bound variable ID exists in our valid set
