@@ -1,5 +1,6 @@
 {
   "name": "Stringify",
+  "version": "2.3.0",
   "id": "1547187719316220404",
   "api": "1.0.0",
   "main": "code.js",

@@ -1,6 +1,6 @@
 {
   "name": "stringify-figma-plugin",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "description": "A robust Figma plugin that automatically converts text layers to string variables with enhanced UX and accessibility",
   "main": "code.js",
   "scripts": {
