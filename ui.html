@@ -86,6 +86,87 @@
       min-width: 0;
     }
     
+    /* ============================================================================
+       NAMING CONVENTION TOGGLE
+    ============================================================================ */
+    
+    .naming-toggle-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+      margin: 16px 0;
+      padding: 16px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+    }
+    
+    .naming-toggle-wrapper {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+    
+    .naming-toggle-label {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      font-weight: 600;
+      font-size: 12px;
+      line-height: 16px;
+      letter-spacing: -0.5px;
+      color: #374151;
+      margin: 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: #d1d5db;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      outline: none;
+      border: none;
+    }
+    
+    .toggle-switch:focus {
+      outline: 2px solid #007AFF;
+      outline-offset: 2px;
+    }
+    
+    .toggle-switch[aria-checked="true"] {
+      background: #007AFF;
+    }
+    
+    .toggle-slider {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: #ffffff;
+      border-radius: 10px;
+      transition: transform 0.2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .toggle-switch[aria-checked="true"] .toggle-slider {
+      transform: translateX(20px);
+    }
+    
+    .naming-mode-description {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+      font-size: 11px;
+      line-height: 14px;
+      color: #6b7280;
+      margin: 0;
+      font-weight: 400;
+    }
+    
     .button-container {
       display: flex;
       flex-direction: column;
@@ -742,6 +823,21 @@
     <!-- Status Messages -->
     <div class="status-message" id="statusMessage" role="alert" aria-live="assertive"></div>
 
+    <!-- Naming Convention Toggle -->
+    <section class="naming-toggle-container" aria-labelledby="naming-toggle-heading">
+      <div class="naming-toggle-wrapper">
+        <label for="namingToggle" class="naming-toggle-label" id="naming-toggle-heading">
+          Enable advanced naming convention
+        </label>
+        <div class="toggle-switch" role="switch" aria-checked="false" aria-labelledby="naming-toggle-heading" tabindex="0" id="namingToggle">
+          <div class="toggle-slider"></div>
+        </div>
+      </div>
+      <div class="naming-mode-description" id="namingModeDescription" aria-live="polite">
+        Simple mode: Use text content as variable name
+      </div>
+    </section>
+
     <!-- Action Buttons -->
     <section class="button-container">
       <!-- Enhanced Scanning - Scan Preview -->
@@ -838,6 +934,9 @@
     let ghostVariables = [];
     let isScanningGhosts = false;
     
+    // Naming convention state
+    let currentNamingMode = 'simple'; // Default to simple mode as per PRD
+    
     // UI Elements
     const elements = {
       // Existing elements
@@ -866,7 +965,11 @@
       ghostLabel: document.getElementById('ghostLabel'),
       scanGhostsButton: document.getElementById('scanGhostsButton'),
       clearGhostsButton: document.getElementById('clearGhostsButton'),
-      ghostList: document.getElementById('ghostList')
+      ghostList: document.getElementById('ghostList'),
+      
+      // Naming toggle elements
+      namingToggle: document.getElementById('namingToggle'),
+      namingModeDescription: document.getElementById('namingModeDescription')
     };
     
     // ============================================================================
@@ -1463,6 +1566,16 @@
           updateScanPreview(msg.scope);
           break;
           
+        case 'naming-preference-loaded':
+          currentNamingMode = msg.namingMode;
+          updateNamingToggleUI(msg.namingMode);
+          break;
+          
+        case 'naming-preference-updated':
+          currentNamingMode = msg.namingMode;
+          updateNamingToggleUI(msg.namingMode);
+          break;
+          
         default:
           console.warn('Unknown message type:', msg.type);
       }
@@ -1473,6 +1586,52 @@
     }
     
     // ============================================================================
+    // NAMING CONVENTION TOGGLE FUNCTIONS
+    // ============================================================================
+    
+    function updateNamingToggleUI(namingMode) {
+      if (!elements.namingToggle || !elements.namingModeDescription) return;
+      
+      const isHierarchical = namingMode === 'hierarchical';
+      
+      // Update toggle visual state
+      elements.namingToggle.setAttribute('aria-checked', isHierarchical.toString());
+      
+      // Update description text
+      if (isHierarchical) {
+        elements.namingModeDescription.textContent = 'Advanced mode: Use hierarchical path with design context';
+      } else {
+        elements.namingModeDescription.textContent = 'Simple mode: Use text content as variable name';
+      }
+    }
+    
+    function toggleNamingMode() {
+      const newMode = currentNamingMode === 'simple' ? 'hierarchical' : 'simple';
+      sendMessage({ 
+        type: 'update-naming-preference', 
+        namingMode: newMode 
+      });
+    }
+    
+    function initializeNamingToggle() {
+      if (!elements.namingToggle) return;
+      
+      // Add click handler
+      elements.namingToggle.addEventListener('click', toggleNamingMode);
+      
+      // Add keyboard support
+      elements.namingToggle.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleNamingMode();
+        }
+      });
+      
+      // Request current preference from plugin
+      sendMessage({ type: 'get-naming-preference' });
+    }
+    
+    // ============================================================================
     // INITIALIZATION
     // ============================================================================
     
@@ -1480,6 +1639,9 @@
       try {
         // Initialize tab system
         updateTabUI();
+        
+        // Initialize naming convention toggle
+        initializeNamingToggle();
         
         // Initialize stringify functionality
         sendMessage({ type: 'get-collections' });

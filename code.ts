@@ -36,6 +36,7 @@ interface ContentGroup {
   needsNewVariable: boolean;
 }
 
+
 interface GhostVariable {
   nodeId: string;
   nodeName: string;
@@ -113,7 +114,9 @@ type MessageFromUI =
   | { type: 'create-default-collection' }
   | { type: 'scan-ghost-variables' }
   | { type: 'clear-ghost-variables'; ghostIds: string[] }
-  | { type: 'select-ghost-layer'; nodeId: string };
+  | { type: 'select-ghost-layer'; nodeId: string }
+  | { type: 'get-naming-preference' }
+  | { type: 'update-naming-preference'; namingMode: 'simple' | 'hierarchical' };
 
 type MessageToUI = 
   | { type: 'collections-loaded'; collections: CollectionInfo[] }
@@ -127,7 +130,9 @@ type MessageToUI =
   | { type: 'ghost-clear-complete'; result: ClearResult }
   | { type: 'ghost-scan-error'; error: string }
   | { type: 'selection-changed'; scope: ScanPreview }
-  | { type: 'scan-scope-detected'; scope: ScanScope };
+  | { type: 'scan-scope-detected'; scope: ScanScope }
+  | { type: 'naming-preference-loaded'; namingMode: 'simple' | 'hierarchical' }
+  | { type: 'naming-preference-updated'; namingMode: 'simple' | 'hierarchical' };
 
 // ============================================================================
 // CONSTANTS
@@ -163,6 +168,49 @@ const VARIABLE_NAME_PATTERNS = {
   EDGE_UNDERSCORES: /^_+|_+$/g
 } as const;
 
+const NAMING_CONSTANTS = {
+  STORAGE_KEY: 'namingConvention',
+  DEFAULT_MODE: 'simple' as const,
+  MODES: {
+    SIMPLE: 'simple' as const,
+    HIERARCHICAL: 'hierarchical' as const
+  }
+} as const;
+
+// ============================================================================
+// PREFERENCE MANAGEMENT
+// ============================================================================
+
+class PreferenceManager {
+  private static readonly STORAGE_KEY = NAMING_CONSTANTS.STORAGE_KEY;
+  
+  /**
+   * Load naming mode preference from storage
+   * Defaults to 'simple' for new users as per PRD
+   */
+  static async loadNamingMode(): Promise<'simple' | 'hierarchical'> {
+    try {
+      const saved = await figma.clientStorage.getAsync(this.STORAGE_KEY);
+      return saved === 'hierarchical' ? 'hierarchical' : 'simple';
+    } catch (error) {
+      console.warn('Error loading naming preference:', error);
+      return NAMING_CONSTANTS.DEFAULT_MODE;
+    }
+  }
+  
+  /**
+   * Save naming mode preference to storage
+   */
+  static async saveNamingMode(mode: 'simple' | 'hierarchical'): Promise<void> {
+    try {
+      await figma.clientStorage.setAsync(this.STORAGE_KEY, mode);
+    } catch (error) {
+      console.error('Error saving naming preference:', error);
+      throw new PluginError('Failed to save naming preference');
+    }
+  }
+}
+
 // ============================================================================
 // TEXT PROCESSING FUNCTIONS
 // ============================================================================
@@ -175,19 +223,19 @@ function isValidTextForVariable(text: string): boolean {
   return VARIABLE_NAME_PATTERNS.SAFE_CHARS.test(firstChar);
 }
 
-function createVariableName(text: string, textNode?: TextNode): string {
+function createVariableName(text: string, textNode?: TextNode, namingMode?: 'simple' | 'hierarchical'): string {
   if (!text || text.trim().length === 0) {
     throw new PluginError('Cannot create variable name from empty text', {
       code: ERROR_CODES.INVALID_TEXT
     });
   }
 
-  // If no textNode provided, use simple naming with content
-  if (!textNode) {
-    return createSimpleVariableName(text);
+  // Use simple naming mode if specified or if no textNode provided
+  if (namingMode === 'simple' || !textNode) {
+    return generateSimpleVariableName(text);
   }
 
-  // Create hierarchical naming with content appended for uniqueness
+  // Default to hierarchical naming (backward compatibility)
   const hierarchicalName = createHierarchicalVariableName(text, textNode);
   
   if (hierarchicalName.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
@@ -197,19 +245,31 @@ function createVariableName(text: string, textNode?: TextNode): string {
   return hierarchicalName;
 }
 
-function createSimpleVariableName(text: string): string {
-  let processed = text
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_') // Convert spaces to underscores first
-    .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '_') // Replace other invalid chars with underscores
-    .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
-    .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
 
-  if (!processed) {
-    processed = 'text_variable';
+/**
+ * Generate simple variable name according to PRD specifications
+ * - Remove leading whitespace only
+ * - Preserve original capitalization exactly as designed
+ * - Replace spaces with underscores
+ * - Keep all other characters as-is (including special characters)
+ */
+function generateSimpleVariableName(textContent: string): string {
+  // Remove leading whitespace only (preserve trailing and internal whitespace initially)
+  const trimmedContent = textContent.replace(/^\s+/, '');
+  
+  // If empty after trimming leading whitespace, return default
+  if (!trimmedContent) {
+    return 'text_variable';
   }
-
+  
+  // Replace spaces with underscores, preserve case and other characters
+  let processed = trimmedContent.replace(/\s/g, '_');
+  
+  // Ensure it starts with a valid character for Figma variables
+  if (!/^[a-zA-Z_]/.test(processed)) {
+    processed = `Var_${processed}`;
+  }
+  
   return processed;
 }
 
@@ -520,19 +580,24 @@ function createScanPreview(scope: ScanScope): ScanPreview {
 }
 
 
-function groupTextLayersByContent(textLayers: TextLayerInfo[]): ContentGroup[] {
+function groupTextLayersByContent(textLayers: TextLayerInfo[], namingMode: 'simple' | 'hierarchical' = 'simple'): ContentGroup[] {
   const contentMap = new Map<string, ContentGroup>();
   
   textLayers.forEach(layer => {
     const trimmedContent = layer.characters.trim();
-    const contentKey = trimmedContent.toLowerCase(); // Case-insensitive grouping
+    
+    // For simple mode, use case-sensitive grouping to preserve exact content matching
+    // For hierarchical mode, use case-insensitive grouping as before
+    const contentKey = namingMode === 'simple' 
+      ? trimmedContent  // Case-sensitive for simple mode
+      : trimmedContent.toLowerCase(); // Case-insensitive for hierarchical mode
     
     if (contentMap.has(contentKey)) {
       // Add to existing group
       contentMap.get(contentKey)!.layers.push(layer);
     } else {
-      // Create new group
-      const variableName = createVariableName(trimmedContent, layer.node);
+      // Create new group with appropriate naming mode
+      const variableName = createVariableName(trimmedContent, layer.node, namingMode);
       contentMap.set(contentKey, {
         content: layer.characters, // Keep original casing
         trimmedContent: trimmedContent,
@@ -957,6 +1022,27 @@ let isProcessing = false;
 // Show the UI
 figma.showUI(__html__, PLUGIN_CONFIG.UI_DIMENSIONS);
 
+// Initialize plugin by loading naming preference
+async function initializePlugin(): Promise<void> {
+  try {
+    const namingMode = await PreferenceManager.loadNamingMode();
+    sendMessage({
+      type: 'naming-preference-loaded',
+      namingMode
+    });
+  } catch (error) {
+    console.error('Error initializing plugin:', error);
+    // Send default mode on error
+    sendMessage({
+      type: 'naming-preference-loaded',
+      namingMode: NAMING_CONSTANTS.DEFAULT_MODE
+    });
+  }
+}
+
+// Initialize plugin
+initializePlugin();
+
 // Enhanced Scanning - Optimized Selection Change Handler
 let selectionChangeTimeout: number | null = null;
 let lastSelectionHash = '';
@@ -1046,6 +1132,12 @@ async function handleMessage(msg: MessageFromUI): Promise<void> {
       break;
     case 'select-ghost-layer':
       await handleSelectGhostLayer(msg.nodeId);
+      break;
+    case 'get-naming-preference':
+      await handleGetNamingPreference();
+      break;
+    case 'update-naming-preference':
+      await handleUpdateNamingPreference(msg.namingMode);
       break;
     default:
       throw new Error(`Unknown message type: ${(msg as { type: string }).type}`);
@@ -1244,6 +1336,40 @@ async function handleSelectGhostLayer(nodeId: string): Promise<void> {
   }
 }
 
+async function handleGetNamingPreference(): Promise<void> {
+  try {
+    const namingMode = await PreferenceManager.loadNamingMode();
+    sendMessage({
+      type: 'naming-preference-loaded',
+      namingMode
+    });
+  } catch (error) {
+    console.error('Error loading naming preference:', error);
+    // Send default mode on error
+    sendMessage({
+      type: 'naming-preference-loaded',
+      namingMode: NAMING_CONSTANTS.DEFAULT_MODE
+    });
+  }
+}
+
+async function handleUpdateNamingPreference(namingMode: 'simple' | 'hierarchical'): Promise<void> {
+  try {
+    await PreferenceManager.saveNamingMode(namingMode);
+    sendMessage({
+      type: 'naming-preference-updated',
+      namingMode
+    });
+    
+    // Provide user feedback
+    const modeLabel = namingMode === 'simple' ? 'Simple' : 'Advanced';
+    figma.notify(`Naming mode switched to ${modeLabel}`, { timeout: 2000 });
+  } catch (error) {
+    console.error('Error updating naming preference:', error);
+    throw new PluginError(`Failed to update naming preference: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
 
 async function processTextLayersWithProgress(
   textLayers: TextNode[], 
@@ -1257,6 +1383,9 @@ async function processTextLayersWithProgress(
     errors: 0
   };
 
+  // Load current naming preference
+  const namingMode = await PreferenceManager.loadNamingMode();
+
   // Convert to TextLayerInfo format
   const layerInfos: TextLayerInfo[] = textLayers.map(layer => ({
     id: layer.id,
@@ -1265,8 +1394,8 @@ async function processTextLayersWithProgress(
     node: layer
   }));
 
-  // Group by content for efficient processing
-  const contentGroups = groupTextLayersByContent(layerInfos);
+  // Group by content for efficient processing with current naming mode
+  const contentGroups = groupTextLayersByContent(layerInfos, namingMode);
   const groupAnalysis = analyzeContentGroups(contentGroups);
   
   console.log('Content Analysis:', {
