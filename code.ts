@@ -565,12 +565,24 @@ async function createStringVariable(
     const collection = await validateCollection(collectionId);
     
     const existingVariables = await getExistingVariables(collectionId);
+    
+    // PHASE 1 FIX: Check if exact variable (name + content) already exists
+    const existingVariable = findExistingVariable(existingVariables, variableName, content);
+    if (existingVariable) {
+      return existingVariable; // Reuse existing variable instead of creating duplicate
+    }
+    
+    // Only check for name conflicts if no exact match exists
     const nameConflicts = Array.from(existingVariables.keys())
       .filter(key => key.startsWith(`${variableName}:`));
     
     let finalVariableName = variableName;
     if (nameConflicts.length > 0) {
-      finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
+      // Check if there's a true conflict (same name, different content)
+      const hasContentConflict = nameConflicts.some(key => key !== `${variableName}:${content}`);
+      if (hasContentConflict) {
+        finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
+      }
     }
     
     const variable = figma.variables.createVariable(finalVariableName, collection, 'STRING');
@@ -737,22 +749,21 @@ async function checkVariableConnection(textNode: TextNode, allValidVariableIds: 
       return null; // No connection - not a ghost
     }
     
-    const boundVariable = (textNode as any).getBoundVariable(binding);
-    
-    // No bound variable reference - not a ghost
-    if (!boundVariable) {
-      return null;
+    // PHASE 2 FIX: Use correct Figma API to get bound variable info
+    const boundVariableAlias = textNode.boundVariables[binding];
+    if (!boundVariableAlias || !boundVariableAlias.id) {
+      return null; // No bound variable reference - not a ghost
     }
     
     // Check if the bound variable ID exists in our valid set
-    if (!allValidVariableIds.has(boundVariable.id)) {
+    if (!allValidVariableIds.has(boundVariableAlias.id)) {
       // Ghost variable - binding exists but variable ID not in any collection
       return {
         nodeId: textNode.id,
         nodeName: textNode.name,
         textContent: textNode.characters,
         bindingType: binding,
-        ghostVariableId: boundVariable.id
+        ghostVariableId: boundVariableAlias.id
       };
     }
     
@@ -760,7 +771,7 @@ async function checkVariableConnection(textNode: TextNode, allValidVariableIds: 
     return null;
     
   } catch (error) {
-    // getBoundVariable() threw an error - likely a ghost or corrupted binding
+    // PHASE 2 FIX: Error accessing bound variable - likely a ghost or corrupted binding
     console.warn(`Error checking variable connection for node ${textNode.id}:`, error);
     return {
       nodeId: textNode.id,
@@ -802,10 +813,11 @@ async function clearGhostVariables(ghostIds: string[]): Promise<ClearResult> {
       
       for (const binding of bindings) {
         try {
-          const boundVariable = (node as any).getBoundVariable(binding);
-          if (boundVariable) {
+          // PHASE 2 FIX: Use correct Figma API for bound variables
+          const boundVariableAlias = node.boundVariables?.[binding];
+          if (boundVariableAlias && boundVariableAlias.id) {
             // Check if this is actually a ghost (variable doesn't exist)
-            const variable = await figma.variables.getVariableByIdAsync(boundVariable.id);
+            const variable = await figma.variables.getVariableByIdAsync(boundVariableAlias.id);
             if (!variable) {
               // Clear the ghost binding
               node.setBoundVariable(binding, null);
