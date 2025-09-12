@@ -93,7 +93,6 @@
     .naming-toggle-container {
       display: flex;
       flex-direction: column;
-      gap: 8px;
       width: 100%;
       margin: 16px 0;
       padding: 16px;
@@ -156,15 +155,6 @@
     
     .toggle-switch[aria-checked="true"] .toggle-slider {
       transform: translateX(20px);
-    }
-    
-    .naming-mode-description {
-      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
-      font-size: 11px;
-      line-height: 14px;
-      color: #6b7280;
-      margin: 0;
-      font-weight: 400;
     }
     
     .button-container {
@@ -833,9 +823,6 @@
           <div class="toggle-slider"></div>
         </div>
       </div>
-      <div class="naming-mode-description" id="namingModeDescription" aria-live="polite">
-        Simple mode: Use text content as variable name
-      </div>
     </section>
 
     <!-- Action Buttons -->
@@ -968,8 +955,7 @@
       ghostList: document.getElementById('ghostList'),
       
       // Naming toggle elements
-      namingToggle: document.getElementById('namingToggle'),
-      namingModeDescription: document.getElementById('namingModeDescription')
+      namingToggle: document.getElementById('namingToggle')
     };
     
     // ============================================================================
@@ -1590,19 +1576,12 @@
     // ============================================================================
     
     function updateNamingToggleUI(namingMode) {
-      if (!elements.namingToggle || !elements.namingModeDescription) return;
+      if (!elements.namingToggle) return;
       
       const isHierarchical = namingMode === 'hierarchical';
       
       // Update toggle visual state
       elements.namingToggle.setAttribute('aria-checked', isHierarchical.toString());
-      
-      // Update description text
-      if (isHierarchical) {
-        elements.namingModeDescription.textContent = 'Advanced mode: Use hierarchical path with design context';
-      } else {
-        elements.namingModeDescription.textContent = 'Simple mode: Use text content as variable name';
-      }
     }
     
     function toggleNamingMode() {
