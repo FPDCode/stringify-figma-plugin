@@ -252,6 +252,7 @@ function createVariableName(text: string, textNode?: TextNode, namingMode?: 'sim
  * - Preserve original capitalization exactly as designed
  * - Replace spaces with underscores
  * - Keep all other characters as-is (including special characters)
+ * - Apply smart truncation for long content
  */
 function generateSimpleVariableName(textContent: string): string {
   // Remove leading whitespace only (preserve trailing and internal whitespace initially)
@@ -270,11 +271,9 @@ function generateSimpleVariableName(textContent: string): string {
     processed = `Var_${processed}`;
   }
   
-  // Apply length limit to prevent Figma API errors
+  // Apply smart truncation for long content
   if (processed.length > PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH) {
-    // For simple mode, truncate and add suffix to indicate truncation
-    const maxLength = PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH - 3; // Reserve 3 chars for "..."
-    processed = processed.substring(0, maxLength) + '___';
+    return truncateSimpleVariableName(processed);
   }
   
   return processed;
@@ -398,6 +397,74 @@ function sanitizeName(name: string): string {
     .replace(VARIABLE_NAME_PATTERNS.REPLACE_CHARS, '_') // Replace other invalid chars with underscores
     .replace(VARIABLE_NAME_PATTERNS.MULTIPLE_UNDERSCORES, '_')
     .replace(VARIABLE_NAME_PATTERNS.EDGE_UNDERSCORES, '');
+}
+
+/**
+ * Smart truncation specifically designed for simple mode variable names
+ * Preserves word boundaries and meaningful content for better readability
+ */
+function truncateSimpleVariableName(text: string): string {
+  const maxLength = PLUGIN_CONFIG.MAX_VARIABLE_NAME_LENGTH;
+  if (text.length <= maxLength) return text;
+  
+  const separator = '___';
+  const availableLength = maxLength - separator.length;
+  
+  // Split by underscores (word boundaries in simple mode)
+  const words = text.split('_').filter(word => word.length > 0);
+  
+  if (words.length <= 2) {
+    // For 1-2 words, use character-based truncation
+    const startLength = Math.floor(availableLength * 0.6);
+    const endLength = availableLength - startLength;
+    const start = text.substring(0, startLength);
+    const end = text.substring(text.length - endLength);
+    return `${start}${separator}${end}`;
+  }
+  
+  // For multiple words, try to preserve meaningful start and end words
+  let result = '';
+  let startWords = [];
+  let endWords = [];
+  
+  // Add words from the start until we use about 60% of available space
+  const targetStartLength = Math.floor(availableLength * 0.6);
+  let currentStartLength = 0;
+  
+  for (let i = 0; i < words.length; i++) {
+    const wordWithUnderscore = (i === 0) ? words[i] : `_${words[i]}`;
+    if (currentStartLength + wordWithUnderscore.length <= targetStartLength) {
+      startWords.push(words[i]);
+      currentStartLength += wordWithUnderscore.length;
+    } else {
+      break;
+    }
+  }
+  
+  // Add words from the end until we fill remaining space
+  const remainingLength = availableLength - currentStartLength;
+  let currentEndLength = 0;
+  
+  for (let i = words.length - 1; i >= startWords.length; i--) {
+    const wordWithUnderscore = `_${words[i]}`;
+    if (currentEndLength + wordWithUnderscore.length <= remainingLength) {
+      endWords.unshift(words[i]);
+      currentEndLength += wordWithUnderscore.length;
+    } else {
+      break;
+    }
+  }
+  
+  // Construct the final truncated name
+  const startPart = startWords.join('_');
+  const endPart = endWords.join('_');
+  
+  if (endPart.length > 0) {
+    return `${startPart}${separator}${endPart}`;
+  } else {
+    // If no end words fit, just use start words
+    return startPart.substring(0, maxLength);
+  }
 }
 
 function truncateVariableName(text: string): string {
