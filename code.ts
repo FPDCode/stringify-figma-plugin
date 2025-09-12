@@ -163,9 +163,9 @@ const UI_MESSAGES = {
 
 const VARIABLE_NAME_PATTERNS = {
   SAFE_CHARS: /[A-Za-z0-9_]/,
-  // More permissive regex that preserves Unicode letters, accented characters, and common symbols
-  // Only replace truly problematic characters for Figma variables
-  REPLACE_CHARS: /[^\p{L}\p{N}\s_-]/gu,
+  // Figma-compatible regex: only allow basic Latin letters, numbers, underscores, spaces, and hyphens
+  // Replace everything else including Unicode symbols, accented characters, and special symbols
+  REPLACE_CHARS: /[^A-Za-z0-9\s_-]/g,
   MULTIPLE_UNDERSCORES: /_{2,}/g,
   // Only remove trailing underscores, preserve leading ones for cases like _hash_
   EDGE_UNDERSCORES: /_+$/g
@@ -266,8 +266,8 @@ function generateSimpleVariableName(textContent: string): string {
     return 'text_variable';
   }
   
-  // Ensure it starts with a valid character for Figma variables (letter or underscore)
-  if (!/^[\p{L}_]/u.test(processed)) {
+  // Ensure it starts with a valid character for Figma variables (basic Latin letter or underscore)
+  if (!/^[A-Za-z_]/.test(processed)) {
     processed = `Var_${processed}`;
   }
   
