@@ -79,16 +79,23 @@ function createSimpleVariableName(text) {
 }
 function createHierarchicalVariableName(text, textNode) {
     const parts = [];
-    // Use the layer name for variable naming (no text content suffix)
+    // Use the layer name for variable naming
     let textName = sanitizeName(textNode.name);
     if (!textName) {
         textName = 'text_variable';
+    }
+    // Append sanitized text content to ensure uniqueness for duplicate layer names
+    // This prevents conflicts when multiple layers have the same name but different content
+    // e.g., "title" with content "Home" becomes "title_home", "title" with "About" becomes "title_about"
+    const sanitizedContent = sanitizeName(text);
+    if (sanitizedContent && sanitizedContent !== textName) {
+        textName = `${textName}_${sanitizedContent}`;
     }
     // Find meaningful parent using smart hierarchy traversal
     const meaningfulParent = findMeaningfulParent(textNode);
     // Find root component
     const rootComponent = findRootComponent(textNode);
-    // Build the hierarchical name: Component / MeaningfulParent / LayerName
+    // Build the hierarchical name: Component / MeaningfulParent / LayerName_TextValue
     if (rootComponent && rootComponent !== 'root') {
         parts.push(rootComponent);
     }
@@ -356,8 +363,13 @@ async function getExistingVariables(collectionId) {
             try {
                 const variable = await figma.variables.getVariableByIdAsync(variableId);
                 if (variable && variable.resolvedType === 'STRING') {
-                    const key = `${variable.name}:${variable.valuesByMode[collection.defaultModeId]}`;
-                    variableMap.set(key, variable);
+                    const content = variable.valuesByMode[collection.defaultModeId];
+                    // Store with variable name as key for name-based lookups
+                    const nameKey = variable.name;
+                    const contentKey = `${variable.name}:${content}`;
+                    // Store both ways for flexible lookup
+                    variableMap.set(nameKey, variable);
+                    variableMap.set(contentKey, variable);
                 }
             }
             catch (error) {
@@ -376,8 +388,34 @@ async function createStringVariable(collectionId, variableName, content) {
     try {
         const collection = await validateCollection(collectionId);
         const existingVariables = await getExistingVariables(collectionId);
+        // ENHANCED FIX: Check multiple ways for existing variables
+        // 1. Check if exact variable (name + content) already exists
+        const existingByContent = findExistingVariable(existingVariables, variableName, content);
+        if (existingByContent) {
+            return existingByContent; // Reuse existing variable with same content
+        }
+        // 2. Check if variable with exact name already exists (regardless of content)
+        const existingByName = existingVariables.get(variableName);
+        if (existingByName) {
+            const existingContent = existingByName.valuesByMode[collection.defaultModeId];
+            if (existingContent !== content) {
+                // Variable exists with same name but different content - this is the real conflict
+                // This should not happen with our layername_textvalue pattern, but if it does,
+                // we need to create a unique name
+                const timestamp = Date.now().toString().slice(-4);
+                const uniqueName = `${variableName}_${timestamp}`;
+                const variable = figma.variables.createVariable(uniqueName, collection, 'STRING');
+                variable.setValueForMode(collection.defaultModeId, content);
+                return variable;
+            }
+            else {
+                // Same name and same content - reuse the existing variable
+                return existingByName;
+            }
+        }
+        // 3. Check for name conflicts with numbered variants (_2, _3, etc.)
         const nameConflicts = Array.from(existingVariables.keys())
-            .filter(key => key.startsWith(`${variableName}:`));
+            .filter(key => key.startsWith(`${variableName}_`) && /\d+$/.test(key));
         let finalVariableName = variableName;
         if (nameConflicts.length > 0) {
             finalVariableName = `${variableName}_${nameConflicts.length + 1}`;
